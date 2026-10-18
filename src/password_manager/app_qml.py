@@ -69,7 +69,16 @@ def main() -> None:
     engine.rootContext().setContextProperty("controller", controller)
     engine.load(QUrl.fromLocalFile(str(QML_DIR / "Main.qml")))
     if not engine.rootObjects():
-        print("QML 加载失败：", [error.toString() for error in engine.errors()], file=sys.stderr)
+        # In a windowed (console-less) build both std streams are None, so a
+        # plain print is silently swallowed and the user sees a flash-crash
+        # with nothing to act on. Show the failure in a dialog instead; the
+        # stderr line remains for source runs and CI logs.
+        details = "; ".join(error.toString() for error in engine.errors())
+        if sys.stderr is not None:
+            print("QML 加载失败：", details, file=sys.stderr)
+        from PySide6.QtWidgets import QMessageBox
+
+        QMessageBox.critical(None, "Keeper", f"QML 界面加载失败，程序即将退出。\n\n{details}")
         sys.exit(1)
     window = engine.rootObjects()[0]
 
