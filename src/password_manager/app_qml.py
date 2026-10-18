@@ -5,8 +5,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QUrl
-from PySide6.QtGui import QColor, QPalette
+from PySide6.QtCore import QUrl
 from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtQuickControls2 import QQuickStyle
 from PySide6.QtWidgets import QApplication
@@ -38,22 +37,15 @@ def main() -> None:
     from PySide6.QtGui import QFont
 
     application.setFont(QFont("Inter", 10))
-    try:
-        application.styleHints().setColorScheme(Qt.ColorScheme.Dark)
-    except (AttributeError, RuntimeError):
-        pass
     QQuickStyle.setStyle("Basic")
     icon = application_icon()
     if not icon.isNull():
         application.setWindowIcon(icon)
-    palette = QPalette()
-    from password_manager.ui.theme import BG, BG_DEEP, TEXT
+    # Fusion + dark palette + QSS for the QtWidgets surfaces the QML app still
+    # shows (tray menu, message boxes); Qt Quick rendering is unaffected.
+    from password_manager.ui.theme import apply_widget_chrome
 
-    palette.setColor(QPalette.ColorRole.Window, QColor(BG))
-    palette.setColor(QPalette.ColorRole.WindowText, QColor(TEXT))
-    palette.setColor(QPalette.ColorRole.Base, QColor(BG_DEEP))
-    palette.setColor(QPalette.ColorRole.Text, QColor(TEXT))
-    application.setPalette(palette)
+    apply_widget_chrome(application)
 
     instance, already_running = acquire_single_instance(DEFAULT_VAULT)
     if already_running:

@@ -215,3 +215,40 @@ QStatusBar {{ background: {SURFACE}; color: {TEXT_MUTED}; border-top: 1px solid 
 QMessageBox {{ background: {MENU_BG}; }}
 QToolTip {{ background: {SURFACE_2}; color: {TEXT}; border: 1px solid {BORDER_STRONG}; padding: 5px; }}
 """
+
+
+def apply_widget_chrome(application) -> None:
+    """Give every QtWidgets surface (tray QMenu, QMessageBox) the dark look.
+
+    Both entries need this, but for different reasons. The widgets app is all
+    QtWidgets; the QML app still shows QtWidgets surfaces for the tray menu
+    and message boxes. Without Fusion the native Windows style paints menus
+    with the system *light* theme (white background) while our palette paints
+    the text near-white - white on white, i.e. an unreadable menu. Fusion is
+    the one style that honours the palette deterministically on every
+    platform, so both entries share this exact recipe.
+    """
+    from PySide6.QtCore import Qt
+    from PySide6.QtGui import QColor, QPalette
+
+    application.setStyle("Fusion")
+    # Match the native title bar to the dark UI where the platform supports it
+    # (Qt 6.8+); harmless no-op elsewhere.
+    try:
+        application.styleHints().setColorScheme(Qt.ColorScheme.Dark)
+    except (AttributeError, RuntimeError):
+        pass
+    palette = QPalette()
+    palette.setColor(QPalette.ColorRole.Window, QColor(BG))
+    palette.setColor(QPalette.ColorRole.WindowText, QColor(TEXT))
+    palette.setColor(QPalette.ColorRole.Base, QColor(BG_DEEP))
+    palette.setColor(QPalette.ColorRole.AlternateBase, QColor(SURFACE))
+    palette.setColor(QPalette.ColorRole.Text, QColor(TEXT))
+    palette.setColor(QPalette.ColorRole.Button, QColor(SURFACE_2))
+    palette.setColor(QPalette.ColorRole.ButtonText, QColor(TEXT))
+    palette.setColor(QPalette.ColorRole.Highlight, QColor(ACCENT))
+    palette.setColor(QPalette.ColorRole.HighlightedText, QColor(ACCENT_INK))
+    palette.setColor(QPalette.ColorRole.ToolTipBase, QColor(SURFACE_2))
+    palette.setColor(QPalette.ColorRole.ToolTipText, QColor(TEXT))
+    application.setPalette(palette)
+    application.setStyleSheet(STYLESHEET)

@@ -11,7 +11,7 @@ from datetime import datetime
 from pathlib import Path
 
 from PySide6.QtCore import QPointF, QSize, Qt, QTimer
-from PySide6.QtGui import QAction, QCloseEvent, QColor, QFont, QIcon, QPainter, QPalette, QRadialGradient
+from PySide6.QtGui import QAction, QCloseEvent, QColor, QFont, QIcon, QPainter, QRadialGradient
 from PySide6.QtNetwork import QLocalServer
 from PySide6.QtWidgets import (
     QApplication,
@@ -93,17 +93,16 @@ from password_manager.ui.theme import (
     ACCENT,
     ACCENT_INK,
     BG,
-    BG_DEEP,
     BORDER_SOFT,
     DANGER,
     GLOW_BLUE,
     GLOW_TEAL,
     OK,
-    STYLESHEET,
-    SURFACE,
-    SURFACE_2,
     TEXT,
     TEXT_MUTED,
+)
+from password_manager.ui.theme import (
+    STYLESHEET as STYLESHEET,  # re-exported for backwards compatibility
 )
 from password_manager.ui.widgets import (
     Card,
@@ -1732,31 +1731,15 @@ def main() -> None:
         QMessageBox.information(None, APP_NAME, "Keeper 已经在运行，已把它的窗口调到前台。")
         return
     application.setStyle("Fusion")
-    # Match the window title bar and native chrome to the dark UI (Qt 6.8+).
-    try:
-        from PySide6.QtCore import Qt as _Qt
-
-        application.styleHints().setColorScheme(_Qt.ColorScheme.Dark)
-    except (AttributeError, RuntimeError):
-        pass
     icon = application_icon()
     if icon.isNull():
         icon = application.style().standardIcon(QStyle.StandardPixmap.SP_ComputerIcon)
     application.setWindowIcon(icon)
-    palette = QPalette()
-    palette.setColor(QPalette.ColorRole.Window, QColor(BG))
-    palette.setColor(QPalette.ColorRole.WindowText, QColor(TEXT))
-    palette.setColor(QPalette.ColorRole.Base, QColor(BG_DEEP))
-    palette.setColor(QPalette.ColorRole.AlternateBase, QColor(SURFACE))
-    palette.setColor(QPalette.ColorRole.Text, QColor(TEXT))
-    palette.setColor(QPalette.ColorRole.Button, QColor(SURFACE_2))
-    palette.setColor(QPalette.ColorRole.ButtonText, QColor(TEXT))
-    palette.setColor(QPalette.ColorRole.Highlight, QColor(ACCENT))
-    palette.setColor(QPalette.ColorRole.HighlightedText, QColor(ACCENT_INK))
-    palette.setColor(QPalette.ColorRole.ToolTipBase, QColor(SURFACE_2))
-    palette.setColor(QPalette.ColorRole.ToolTipText, QColor(TEXT))
-    application.setPalette(palette)
-    application.setStyleSheet(STYLESHEET)
+    # Fusion + dark palette + the shared QSS (was inline here; now the same
+    # recipe the QML entry applies so tray menus and dialogs match everywhere).
+    from password_manager.ui.theme import apply_widget_chrome
+
+    apply_widget_chrome(application)
     window = VaultWindow()
     window.setWindowIcon(icon)
     window.show()
