@@ -23,7 +23,14 @@ ApplicationWindow {
             close.accepted = false
             root.hide()
             controller.markHiddenToTray()
+            return
         }
+        // No tray (or an explicit quit): closing is the real exit. Prepare the
+        // shutdown so the vault connection closes and the last copied secret
+        // is wiped from the clipboard - the 30s timer dies with the process,
+        // so without this the password would stay on the pasteboard forever.
+        root.quitting = true
+        controller.prepareQuit()
     }
 
     function confirmQuit() {
@@ -60,7 +67,14 @@ ApplicationWindow {
         anchors { left: parent.left; top: parent.top; bottom: parent.bottom }
         width: 300
         onAddRequested: entryDialog.openFor(null)
-        onExportRequested: exportDialog.open()
+        // Plaintext warning before the file picker, mirroring the widgets
+        // app's QMessageBox: the exported sheet carries every password in
+        // the clear, so the user must acknowledge that before choosing a path.
+        onExportRequested: confirmDialog.ask(
+            "导出凭据",
+            "导出的 Excel 文件不会加密，且包含所有明文密码。请只保存到受信任的位置，使用完毕后及时删除。确定继续导出？",
+            function () { exportDialog.open() },
+            "导出")
         onRekeyRequested: rekeyDialog.open()
     }
 
@@ -120,8 +134,11 @@ ApplicationWindow {
         nameFilters: ["Excel 工作簿 (*.xlsx)"]
         fileMode: FileDialog.SaveFile
         onAccepted: {
-            var result = controller.exportVault(selectedFile.toString().replace("file:///", ""))
-            toast.show(result.ok ? `已导出 ${result.count} 个项目` : result.error)
+            // Pass the url itself: the controller resolves it with
+            // QUrl.toLocalFile(), which handles spaces, non-ASCII paths and
+            // the POSIX leading slash that a "file:///" strip would lose.
+            var result = controller.exportVault(selectedFile)
+            toast.show(result.ok ? `已导出 ${result.count} 个项目到 ${result.path}` : result.error)
         }
     }
 

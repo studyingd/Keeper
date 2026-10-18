@@ -4,6 +4,10 @@ version = "0.1.0"
 description = "A local, encrypted desktop password manager for application and server credentials."
 readme = "README.md"
 requires-python = ">=3.11"
+authors = [
+    { name = "aronurx" },
+]
+urls = { Repository = "https://github.com/studyingd/Keeper" }
 dependencies = [
     "PySide6>=6.8.0",
     "openpyxl>=3.1.0",
@@ -14,10 +18,11 @@ dependencies = [
 dev = [
     "pytest>=8.3.0",
     "PyInstaller>=6.11.0",
+    "ruff>=0.8.0",
 ]
 
 [project.scripts]
-password-manager = "password_manager.app:main"
+password-manager = "password_manager.entry:main"
 
 [build-system]
 requires = ["setuptools>=75"]
@@ -29,5 +34,25 @@ package-dir = {"" = "src"}
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+password_manager = ["qml/**/*", "assets/*", "ui/fonts/*"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 140
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+# Start conservative: pyflakes + pycodestyle errors + pyupgrade + a handful of
+# bugbear checks. The codebase already passes these; stricter rule families
+# (e.g. ANN, D) can be adopted incrementally.
+select = ["E4", "E7", "E9", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests and dev scripts must point QT_QPA_PLATFORM / PASSWORD_MANAGER_VAULT at
+# the environment *before* importing Qt or the package under test.
+"tests/*" = ["E402"]
+"scripts/*" = ["E402"]

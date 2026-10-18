@@ -41,6 +41,7 @@ if (Test-Path "$projectRoot\.venv\Scripts\python.exe") {
     --icon "$projectRoot\src\password_manager\assets\keeper.ico" `
     --add-data "$projectRoot\src\password_manager\assets;password_manager\assets" `
     --add-data "$projectRoot\src\password_manager\ui\fonts;password_manager\ui\fonts" `
+    --add-data "$projectRoot\src\password_manager\qml;password_manager\qml" `
     --paths "$projectRoot\src" `
     --collect-all sqlcipher3 `
     main.py

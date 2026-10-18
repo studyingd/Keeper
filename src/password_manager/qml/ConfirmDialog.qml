@@ -19,11 +19,13 @@ Popup {
     property string titleText: ""
     property string messageText: ""
     property var onConfirmed: null
+    property string confirmText: "删除"
 
-    function ask(title, message, callback) {
+    function ask(title, message, callback, button_text) {
         titleText = title
         messageText = message
         onConfirmed = callback
+        confirmText = button_text || "删除"
         open()
     }
 
@@ -60,7 +62,7 @@ Popup {
             AppButton { text: "取消"; onClicked: root.close() }
             AppButton {
                 primary: true
-                text: "删除"
+                text: root.confirmText
                 onClicked: {
                     root.close()
                     if (root.onConfirmed) root.onConfirmed()

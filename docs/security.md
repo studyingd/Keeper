@@ -4,7 +4,7 @@
 所有行为均以 `src/password_manager/` 下的代码为准,文中给出文件与符号名便于对照。
 
 - 保险库与密钥派生:[`vault/repository.py`](../src/password_manager/vault/repository.py)
-- 解锁节流、自动锁定、剪贴板清理:[`app.py`](../src/password_manager/app.py)
+- 解锁节流、自动锁定、剪贴板清理:[`controller.py`](../src/password_manager/controller.py)(QML 默认 UI)与 [`app.py`](../src/password_manager/app.py)(`KEEPER_UI=widgets` 后备 UI,同一套规则的两份实现)
 - SSH / RDP / 浏览器 / 剪贴板标记:[`services/actions.py`](../src/password_manager/services/actions.py)
 
 ## 目录
@@ -29,7 +29,7 @@
 | 迭代次数 | 512,000 | `SQLCIPHER_KDF_ITER` |
 | salt | 每个保险库文件独有的随机 salt | SQLCipher 页头 |
 | 文件标识 | `PRAGMA application_id = 0x564B5032`(`"VKP2"`) | `APPLICATION_ID` |
-| 结构版本 | `PRAGMA user_version = 5` | `SCHEMA_VERSION` |
+| 结构版本 | `PRAGMA user_version = 6`(v6 恢复了 `entries.tags` 资产标签列,旧库解锁时自动迁移) | `SCHEMA_VERSION` |
 | 默认路径 | `~/.keeper/vault.sqlcipher` | `DEFAULT_VAULT` |
 
 关键点:

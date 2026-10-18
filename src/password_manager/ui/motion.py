@@ -72,7 +72,7 @@ def fade_widget(widget: QWidget, *, start: float = 0.0, end: float = 1.0, durati
     if on_finished is not None:
         animation.finished.connect(on_finished)
     animation.start(QAbstractAnimation.DeletionPolicy.DeleteWhenStopped)
-    setattr(widget, "_fade_animation", animation)  # keep a reference alive
+    widget._fade_animation = animation  # keep a reference alive
 
 
 def dialog_spring(dialog: QDialog, *, duration: int = 340) -> None:

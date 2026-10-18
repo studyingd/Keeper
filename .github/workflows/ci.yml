@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        # Keeper ships Windows and macOS builds; sqlcipher3-wheels has no
+        # Linux wheels, so Linux is not part of the support matrix.
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install
+        run: python -m pip install -e ".[dev]"
+      - name: Lint (ruff)
+        run: python -m ruff check src tests scripts
+      - name: Test (pytest)
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python -m pytest tests -v

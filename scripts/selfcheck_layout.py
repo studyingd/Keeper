@@ -16,7 +16,7 @@ VAULT = Path(os.environ["PASSWORD_MANAGER_VAULT"])
 if VAULT.exists():
     VAULT.unlink()
 
-from PySide6.QtCore import QTimer, QUrl, Qt
+from PySide6.QtCore import Qt, QTimer, QUrl
 from PySide6.QtGui import QFont, QImage
 from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtQuickControls2 import QQuickStyle
@@ -57,7 +57,9 @@ if not engine.rootObjects():
     print("FAIL: root objects empty")
     sys.exit(1)
 window = engine.rootObjects()[0]
-window.width = 980; window.height = 640; window.show()
+window.width = 980
+window.height = 640
+window.show()
 
 
 def find_card_rects(image: QImage) -> list:
@@ -81,7 +83,6 @@ def find_card_rects(image: QImage) -> list:
 
 def check_home(image: QImage) -> list:
     problems = []
-    W = image.width()
     rects = find_card_rects(image)
     if not rects:
         problems.append("home: no card surfaces found at all")

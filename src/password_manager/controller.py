@@ -15,14 +15,16 @@ from __future__ import annotations
 import os
 import time
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from PySide6.QtCore import (
+    Property,
     QAbstractListModel,
     QModelIndex,
     QObject,
-    Property,
     Qt,
     QTimer,
+    QUrl,
     Signal,
     Slot,
 )
@@ -36,6 +38,7 @@ from password_manager.generator import (
     strength_level,
 )
 from password_manager.models import Credential, CredentialDraft, Entry, EntryDraft
+
 # Imported into this module's namespace so tests can monkeypatch them here,
 # exactly the way the widgets app did with password_manager.app.
 from password_manager.services.actions import (
@@ -49,6 +52,9 @@ from password_manager.services.actions import (
 from password_manager.vault.repository import (
     VaultRepository,
 )
+
+if TYPE_CHECKING:
+    from PySide6.QtNetwork import QLocalServer
 
 APP_NAME = "Keeper"
 DEFAULT_VAULT = Path(os.environ.get("PASSWORD_MANAGER_VAULT", Path.home() / ".keeper" / "vault.sqlcipher"))
@@ -108,7 +114,7 @@ def single_instance_name(vault_path: Path) -> str:
     return f"keeper-vault-{digest}"
 
 
-def acquire_single_instance(vault_path: Path) -> tuple["QLocalServer | None", bool]:
+def acquire_single_instance(vault_path: Path) -> tuple[QLocalServer | None, bool]:
     """Report whether another Keeper already owns this vault.
 
     The existing owner is probed *before* listening: on Windows, two
@@ -224,7 +230,7 @@ class EntryListModel(QAbstractListModel):
         super().__init__(parent)
         self._rows: list[dict] = []
 
-    def rowCount(self, parent=QModelIndex()) -> int:  # noqa: N802, ARG002
+    def rowCount(self, parent=QModelIndex()) -> int:  # noqa: N802, ARG002, B008
         return 0 if parent.isValid() else len(self._rows)
 
     def data(self, index: QModelIndex, role: int = Qt.ItemDataRole.DisplayRole):
@@ -307,7 +313,7 @@ class VaultController(QObject):
         return QSystemTrayIcon.isSystemTrayAvailable()
 
     def _build_tray(self) -> None:
-        from PySide6.QtGui import QAction, QIcon
+        from PySide6.QtGui import QAction
         from PySide6.QtWidgets import QMenu, QSystemTrayIcon
 
         self.tray_icon = QSystemTrayIcon(QGuiApplication.windowIcon(), self)
@@ -523,10 +529,7 @@ class VaultController(QObject):
             self.entries_model.set_rows([])
             self._recompute_stats([])
             return
-        counts = {
-            entry.id: len(self.repository.list_credentials(entry.id))
-            for entry in self.repository.list_entries()
-        }
+        counts = self.repository.entry_credential_counts()
         rows: list[dict] = []
         all_entries = self.repository.list_entries(self._search)
         for entry in all_entries:
@@ -545,7 +548,7 @@ class VaultController(QObject):
                 }
             )
         self.entries_model.set_rows(rows)
-        self._recompute_stats(all_entries)
+        self._recompute_stats(all_entries, counts)
         self.entriesChanged.emit()
 
     @staticmethod
@@ -562,9 +565,11 @@ class VaultController(QObject):
             sub = (sub + " · " if sub else "") + " · ".join(entry.tags[:3])
         return sub
 
-    def _recompute_stats(self, entries: list[Entry]) -> None:
+    def _recompute_stats(self, entries: list[Entry], counts: dict[int, int] | None = None) -> None:
+        if counts is None:
+            counts = self.repository.entry_credential_counts() if self.repository.unlocked else {}
         servers = sum(1 for entry in entries if entry.kind == "server")
-        credentials = sum(len(self.repository.list_credentials(entry.id)) for entry in entries) if self.repository.unlocked else 0
+        credentials = sum(counts.get(entry.id, 0) for entry in entries) if self.repository.unlocked else 0
         new_stats = {"servers": servers, "applications": len(entries) - servers, "credentials": credentials}
         if new_stats != self._stats:
             self._stats = new_stats
@@ -697,12 +702,23 @@ class VaultController(QObject):
         self.toastRequested.emit(message)
         if recent is not None:
             self._remember_use(*recent)
-        QTimer.singleShot(CLIPBOARD_CLEAR_MS, lambda: self._clear_clipboard(token))
+        QTimer.singleShot(CLIPBOARD_CLEAR_MS, lambda: self._clear_clipboard(token, value))
         return True
 
-    def _clear_clipboard(self, token: int) -> None:
-        if token == self._clipboard_token:
-            QGuiApplication.clipboard().clear()
+    def _clear_clipboard(self, token: int, secret: str = "") -> None:
+        """Wipe the copied secret, unless the user has since copied something else.
+
+        The token only changes when Keeper itself copies again, so a plain
+        token match does not prove the pasteboard still holds our value: the
+        user may have copied unrelated text in another app in the meantime.
+        Clearing blindly would destroy that content, so the clipboard is only
+        emptied when it still shows the secret we put there.
+        """
+        if token != self._clipboard_token:
+            return
+        clipboard = QGuiApplication.clipboard()
+        if not secret or clipboard.text() == secret:
+            clipboard.clear()
 
     @Slot(int, str)
     def copyCredentialSecret(self, credential_id: int, what: str) -> None:  # noqa: N802
@@ -759,10 +775,22 @@ class VaultController(QObject):
 
     # -- export / rekey -------------------------------------------------------------
 
-    @Slot(str, result="QVariantMap")
-    def exportVault(self, path: str) -> dict:  # noqa: N802
+    @Slot(QUrl, result="QVariantMap")
+    def exportVault(self, target) -> dict:  # noqa: N802
+        """Export the vault; ``target`` is the FileDialog's selected file.
+
+        QML hands over a url, which must be resolved with ``QUrl.toLocalFile``:
+        stringifying it in QML yields the fully percent-encoded form (a path
+        with spaces or Chinese characters would be written out literally as
+        ``%20``/``%E5...``), and stripping ``file:///`` by hand drops the
+        leading slash on POSIX systems. Plain strings are still accepted for
+        direct callers and tests.
+        """
         if not self.repository.unlocked:
             return {"ok": False, "error": "请先解锁保险库再导出。"}
+        path = target.toLocalFile() if isinstance(target, QUrl) else str(target)
+        if not path:
+            return {"ok": False, "error": "没有选择导出位置。"}
         rows = collect_export_rows(self.repository)
         if not rows:
             return {"ok": False, "error": "保险库中没有可导出的项目。"}

@@ -8,20 +8,20 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
 from PySide6.QtCore import Qt
-from PySide6.QtTest import QTest
 from PySide6.QtNetwork import QLocalServer
+from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QDialog, QLabel, QListWidgetItem, QPushButton, QToolButton
 
+import password_manager.app as app_module
 from password_manager.app import (
     EXPORT_COLUMNS,
     GENERATED_PASSWORD_LENGTH,
     PASSWORD_CHARSETS,
+    STYLESHEET,
     THROTTLE_FILE_NAME,
     CredentialDialog,
     EntryDialog,
-    PasswordGenerator,
     RekeyDialog,
-    STYLESHEET,
     UnlockDialog,
     VaultWindow,
     _allow_console_interrupt,
@@ -35,7 +35,6 @@ from password_manager.app import (
     unlock_failure_delay_ms,
     write_export_xlsx,
 )
-import password_manager.app as app_module
 from password_manager.models import CredentialDraft, EntryDraft
 from password_manager.vault.repository import VaultRepository
 
@@ -196,8 +195,6 @@ def test_credential_dialog_uses_custom_project_fields(application: QApplication)
     dialog.username.setText("admin")
     dialog.password.setText("secret")
     dialog.extra.setText("https://panel.example.test")
-
-    draft = dialog.draft()
 
     assert dialog.draft() == CredentialDraft(
         kind="custom",
@@ -899,7 +896,9 @@ def test_enter_saves_entry_dialogs_instead_of_cancelling(application: QApplicati
     assert invalid_dialog.isVisible()
     assert invalid_dialog.error.isVisible()
 
-    server_dialog.close(); app_dialog.close(); invalid_dialog.close()
+    server_dialog.close()
+    app_dialog.close()
+    invalid_dialog.close()
     window.close()
 
 

@@ -1,7 +1,7 @@
 import os
 import shutil
-import sys
 import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -44,20 +44,12 @@ def test_extracts_only_http_urls_from_credential_text() -> None:
     assert extract_url("ssh://host.example.test", "No web page") is None
 
 
-def test_default_opener_prefers_chrome_when_installed(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
-    fake_chrome = tmp_path / "chrome.exe"
-    fake_chrome.write_bytes(b"")
-    monkeypatch.setattr(actions, "chrome_executable", lambda: fake_chrome)
-    launched: list[list[str]] = []
-    monkeypatch.setattr(actions.subprocess, "Popen", launched.append)
+def test_default_opener_uses_the_system_default_browser(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Login pages must open in the user's chosen default browser.
 
-    actions.default_opener()("https://console.example.test")
-
-    assert launched == [[str(fake_chrome), "https://console.example.test"]]
-
-
-def test_default_opener_falls_back_to_system_browser(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(actions, "chrome_executable", lambda: None)
+    A password manager should not second-guess that choice: the default may
+    be a hardened or sandboxed profile picked exactly for credential work.
+    """
     opened: list[str] = []
     monkeypatch.setattr(actions.webbrowser, "open", opened.append)
 

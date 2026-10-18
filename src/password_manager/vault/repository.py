@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import ipaddress
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from sqlcipher3 import dbapi2 as sqlcipher
@@ -213,6 +213,18 @@ class VaultRepository:
         ).fetchall()
         return [self._credential_from_row(row) for row in rows]
 
+    def entry_credential_counts(self) -> dict[int, int]:
+        """Per-entry credential counts in one query.
+
+        Refreshing the sidebar used to run ``list_credentials`` once per
+        entry - and the stats pass did so again - so every search keystroke
+        cost 2N+2 statements. This covers both passes with a single GROUP BY.
+        """
+        rows = self._require_connection().execute(
+            "SELECT entry_id, COUNT(*) AS count FROM credentials GROUP BY entry_id"
+        ).fetchall()
+        return {row["entry_id"]: row["count"] for row in rows}
+
     def get_credential(self, credential_id: int) -> Credential | None:
         row = self._require_connection().execute("SELECT * FROM credentials WHERE id = ?", (credential_id,)).fetchone()
         return self._credential_from_row(row) if row else None
@@ -384,4 +396,4 @@ class VaultRepository:
 
     @staticmethod
     def _timestamp() -> str:
-        return datetime.now(timezone.utc).isoformat()
+        return datetime.now(UTC).isoformat()

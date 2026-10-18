@@ -7,22 +7,18 @@ from pathlib import Path
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
-from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
 
 import password_manager.controller as controller_module
 from password_manager.controller import (
     VaultController,
-    collect_export_rows,
     load_unlock_throttle,
     masked_password,
     save_unlock_throttle,
     unlock_failure_delay_ms,
-    write_export_xlsx,
 )
 from password_manager.models import CredentialDraft, EntryDraft
 from password_manager.vault.repository import VaultRepository
-
 
 MASTER_PASSWORD = "correct horse battery staple"
 
@@ -417,7 +413,7 @@ def test_generator_slots_share_the_pure_module() -> None:
 def test_export_vault_writes_the_workbook(application: QApplication, vault: VaultRepository, tmp_path: Path) -> None:
     from openpyxl import load_workbook
 
-    data = make_data(vault)
+    make_data(vault)
     controller = VaultController(vault.path, tray_available=False)
 
     locked_result = controller.exportVault(str(tmp_path / "a.xlsx"))
@@ -433,6 +429,55 @@ def test_export_vault_writes_the_workbook(application: QApplication, vault: Vaul
     assert sheet.cell(row=2, column=4).value == "主账号"  # 阿里云的凭据排在前
     assert sheet.cell(row=3, column=4).value == "系统登录账号"
     assert sheet.cell(row=3, column=8).value == "MySQL,生产环境"
+
+
+def test_export_vault_accepts_a_qml_file_url(application: QApplication, vault: VaultRepository, tmp_path: Path) -> None:
+    """The QML FileDialog hands over a url; it must resolve to a local path.
+
+    Stringifying the url in QML would percent-encode spaces and non-ASCII, and
+    stripping "file:///" by hand drops the POSIX leading slash.
+    """
+    from openpyxl import load_workbook
+    from PySide6.QtCore import QUrl
+
+    make_data(vault)
+    controller = VaultController(vault.path, tray_available=False)
+    assert controller.attemptUnlock(MASTER_PASSWORD)["ok"] is True
+
+    target = tmp_path / "导出 目录" / "凭据.xlsx"
+    target.parent.mkdir(parents=True)
+    result = controller.exportVault(QUrl.fromLocalFile(str(target)))
+
+    assert result["ok"] is True and result["count"] == 4
+    assert Path(result["path"]) == target
+    assert target.exists()
+    assert load_workbook(target).active.max_row == 5
+
+
+def test_clipboard_clear_skips_content_the_user_copied_in_between(application: QApplication, vault: VaultRepository) -> None:
+    """The 30s wipe must not destroy a copy the user made after Keeper's."""
+    data = make_data(vault)
+    controller = VaultController(vault.path, tray_available=False)
+    assert controller.attemptUnlock(MASTER_PASSWORD)["ok"] is True
+
+    controller.copyCredentialSecret(data["mysql"].id, "password")
+    token = controller._clipboard_token
+    secret = "hunter2"
+
+    # The user copies something else afterwards; Keeper keeps its hands off.
+    QApplication.clipboard().setText("my own text")
+    controller._clear_clipboard(token, secret)
+    assert QApplication.clipboard().text() == "my own text"
+
+    # Still our secret on the pasteboard: wipe it.
+    QApplication.clipboard().setText(secret)
+    controller._clear_clipboard(token, secret)
+    assert QApplication.clipboard().text() == ""
+
+    # Legacy two-argument call sites (no secret recorded) keep clearing.
+    QApplication.clipboard().setText("anything")
+    controller._clear_clipboard(token)
+    assert QApplication.clipboard().text() == ""
 
 
 def test_rekey_vault_flow(application: QApplication, vault: VaultRepository) -> None:

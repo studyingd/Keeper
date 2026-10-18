@@ -5,7 +5,7 @@ a = Analysis(
     ['main.py'],
     pathex=[],
     binaries=[],
-    datas=[('src/password_manager/assets', 'password_manager/assets'), ('src/password_manager/ui/fonts', 'password_manager/ui/fonts')],
+    datas=[('src/password_manager/assets', 'password_manager/assets'), ('src/password_manager/ui/fonts', 'password_manager/ui/fonts'), ('src/password_manager/qml', 'password_manager/qml')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},

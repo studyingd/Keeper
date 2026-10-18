@@ -14,8 +14,8 @@ import sys
 import tempfile
 import threading
 import webbrowser
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 from password_manager.models import format_host_port, split_host_port
 
@@ -46,37 +46,15 @@ def extract_url(*values: str) -> str | None:
     return None
 
 
-def chrome_executable() -> Path | None:
-    """Locate a Chrome installation, if present."""
-    if sys.platform == "darwin":
-        candidate = Path("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
-        if candidate.exists():
-            return candidate
-        which = shutil.which("google-chrome")
-        return Path(which) if which else None
-
-    roots = (os.environ.get("PROGRAMFILES"), os.environ.get("PROGRAMFILES(X86)"), os.environ.get("LOCALAPPDATA"))
-    for root in roots:
-        if not root:
-            continue
-        candidate = Path(root) / "Google" / "Chrome" / "Application" / "chrome.exe"
-        if candidate.exists():
-            return candidate
-    which = shutil.which("chrome")
-    return Path(which) if which else None
-
-
 def default_opener() -> Callable[[str], bool]:
-    """Prefer Chrome; fall back to the system default browser when Chrome is absent."""
-    chrome = chrome_executable()
-    if chrome is None:
-        return webbrowser.open
+    """Open URLs with the user's default browser.
 
-    def open_with_chrome(url: str) -> bool:
-        subprocess.Popen([str(chrome), url])
-        return True
-
-    return open_with_chrome
+    Keeper used to hunt for a Chrome install and prefer it, but a password
+    manager should respect the user's chosen default: it may well be a
+    hardened profile or a dedicated sandboxed browser, and second-guessing
+    that choice sends login pages somewhere unexpected.
+    """
+    return webbrowser.open
 
 
 def open_url(url: str, opener: Callable[[str], bool] | None = None) -> None:
@@ -139,7 +117,15 @@ def system_idle_seconds() -> float | None:
         try:
             if not ctypes.windll.user32.GetLastInputInfo(ctypes.byref(info)):
                 return None
-            return (ctypes.windll.kernel32.GetTickCount() - info.dwTime) / 1000.0
+            # dwTime shares the 32-bit tick space of GetTickCount, which wraps
+            # every ~49.7 days of uptime; a naive subtraction goes negative
+            # after the wrap and the idle lock would never fire again. The
+            # 64-bit counter masked into the same space makes the modular
+            # difference correct across the wrap.
+            kernel32 = ctypes.windll.kernel32
+            kernel32.GetTickCount64.restype = ctypes.c_uint64
+            elapsed_ms = (int(kernel32.GetTickCount64()) - info.dwTime) & 0xFFFFFFFF
+            return elapsed_ms / 1000.0
         except (OSError, AttributeError):
             return None
 

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
 import math
 import os
 import signal
@@ -12,12 +10,9 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-from openpyxl import Workbook
-from openpyxl.styles import Font
-from openpyxl.utils import get_column_letter
-from PySide6.QtCore import QPointF, QSize, Qt, QTimer, Signal
+from PySide6.QtCore import QPointF, QSize, Qt, QTimer
 from PySide6.QtGui import QAction, QCloseEvent, QColor, QFont, QIcon, QPainter, QPalette, QRadialGradient
-from PySide6.QtNetwork import QLocalServer, QLocalSocket
+from PySide6.QtNetwork import QLocalServer
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
@@ -34,7 +29,6 @@ from PySide6.QtWidgets import (
     QPushButton,
     QRadioButton,
     QScrollArea,
-    QSizePolicy,
     QSlider,
     QSplitter,
     QStackedWidget,
@@ -45,15 +39,43 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from password_manager.controller import (  # re-exported for backwards compatibility
+    EXPORT_COLUMNS as EXPORT_COLUMNS,
+)
+from password_manager.controller import (
+    IDLE_POLL_MS,
+    THROTTLE_FILE_NAME,
+    acquire_single_instance,
+    collect_export_rows,
+    load_unlock_throttle,
+    save_unlock_throttle,
+    unlock_failure_delay_ms,
+    write_export_xlsx,
+)
+from password_manager.controller import (
+    UNLOCK_FAILURE_DELAY_MAX_MS as UNLOCK_FAILURE_DELAY_MAX_MS,
+)
+from password_manager.controller import (
+    UNLOCK_FAILURE_DELAY_MIN_MS as UNLOCK_FAILURE_DELAY_MIN_MS,
+)
+from password_manager.controller import (
+    single_instance_name as single_instance_name,
+)
 from password_manager.generator import (  # re-exported for backwards compatibility
     GENERATED_PASSWORD_LENGTH,
-    PASSWORD_CHARSETS,
-    STRENGTH_LABELS,
-    STRENGTH_THRESHOLDS,
     entropy_bits,
     generate_password,
     strength_label,
     strength_level,
+)
+from password_manager.generator import (
+    PASSWORD_CHARSETS as PASSWORD_CHARSETS,
+)
+from password_manager.generator import (
+    STRENGTH_LABELS as STRENGTH_LABELS,
+)
+from password_manager.generator import (
+    STRENGTH_THRESHOLDS as STRENGTH_THRESHOLDS,
 )
 from password_manager.models import Credential, CredentialDraft, Entry, EntryDraft
 from password_manager.services.actions import (
@@ -64,27 +86,24 @@ from password_manager.services.actions import (
     set_concealed_clipboard,
     system_idle_seconds,
 )
-from password_manager.ui.icons import credential_icon_name, icon, kind_icon_name
 from password_manager.ui.fonts import ensure_fonts_loaded
+from password_manager.ui.icons import credential_icon_name, icon, kind_icon_name
 from password_manager.ui.motion import dialog_spring, drop_shadow, fade_widget, glow, pulse_forever
 from password_manager.ui.theme import (
     ACCENT,
     ACCENT_INK,
     BG,
     BG_DEEP,
-    BORDER,
     BORDER_SOFT,
-    BORDER_STRONG,
     DANGER,
     GLOW_BLUE,
     GLOW_TEAL,
     OK,
+    STYLESHEET,
     SURFACE,
     SURFACE_2,
     TEXT,
-    TEXT_FAINT,
     TEXT_MUTED,
-    STYLESHEET,
 )
 from password_manager.ui.widgets import (
     Card,
@@ -94,24 +113,8 @@ from password_manager.ui.widgets import (
     TagEdit,
     Toast,
 )
-from password_manager.controller import (  # re-exported for backwards compatibility
-    EXPORT_COLUMNS,
-    IDLE_POLL_MS,
-    THROTTLE_FILE_NAME,
-    UNLOCK_FAILURE_DELAY_MAX_MS,
-    UNLOCK_FAILURE_DELAY_MIN_MS,
-    acquire_single_instance,
-    collect_export_rows,
-    load_unlock_throttle,
-    save_unlock_throttle,
-    single_instance_name,
-    unlock_failure_delay_ms,
-    write_export_xlsx,
-)
 from password_manager.vault.repository import (
-    MAX_ENTRY_TAGS,
     VaultRepository,
-    normalize_entry_tags,
     validate_credential_draft,
     validate_entry_draft,
 )
@@ -123,7 +126,7 @@ SERVER_TAG_SUGGESTIONS = ["MySQL", "Redis", "Nginx", "Docker", "数据库", "生
 APPLICATION_TAG_SUGGESTIONS = ["云平台", "开发", "工作", "个人", "AI", "邮箱"]
 
 
-def focus_existing_window(window: "VaultWindow", server: QLocalServer) -> None:
+def focus_existing_window(window: VaultWindow, server: QLocalServer) -> None:
     """A second Keeper was started: drain its socket and come to the front."""
     connection = server.nextPendingConnection()
     if connection is not None:
@@ -1103,9 +1106,10 @@ class VaultWindow(QMainWindow):
         if not self.repository.unlocked:
             return
         entries = self.repository.list_entries()
+        counts = self.repository.entry_credential_counts()
         servers = sum(1 for entry in entries if entry.kind == "server")
         applications = len(entries) - servers
-        credentials = sum(len(self.repository.list_credentials(entry.id)) for entry in entries)
+        credentials = sum(counts.get(entry.id, 0) for entry in entries)
         self.stat_labels["servers"].setText(str(servers))
         self.stat_labels["applications"].setText(str(applications))
         self.stat_labels["credentials"].setText(str(credentials))
@@ -1275,10 +1279,7 @@ class VaultWindow(QMainWindow):
         if not self.repository.unlocked:
             return
         selected = self.selected_entry_id
-        counts = {
-            entry.id: len(self.repository.list_credentials(entry.id))
-            for entry in self.repository.list_entries()
-        }
+        counts = self.repository.entry_credential_counts()
         self.entries.blockSignals(True)
         self.entries.clear()
         grouped: dict[str, list[Entry]] = {"server": [], "application": []}
@@ -1576,11 +1577,20 @@ class VaultWindow(QMainWindow):
         self.toast.show_message(message)
         if recent is not None:
             self._remember_use(f"{recent[0]} · {recent[1]}", recent[2])
-        QTimer.singleShot(30_000, lambda: self.clear_clipboard(token))
+        QTimer.singleShot(30_000, lambda: self.clear_clipboard(token, value))
 
-    def clear_clipboard(self, token: int) -> None:
-        if token == self.clipboard_token:
-            QApplication.clipboard().clear()
+    def clear_clipboard(self, token: int, secret: str = "") -> None:
+        """Wipe the copied secret - unless the user copied something else since.
+
+        The token only changes when Keeper itself copies again, so a token
+        match alone does not prove the pasteboard still holds our value;
+        clearing blindly would destroy whatever the user copied afterwards.
+        """
+        if token != self.clipboard_token:
+            return
+        clipboard = QApplication.clipboard()
+        if not secret or clipboard.text() == secret:
+            clipboard.clear()
 
     def export_credentials(self) -> None:
         if not self.repository.unlocked:

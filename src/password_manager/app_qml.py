@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-import signal
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import QUrl, Qt
+from PySide6.QtCore import Qt, QUrl
 from PySide6.QtGui import QColor, QPalette
 from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtQuickControls2 import QQuickStyle
@@ -48,7 +47,7 @@ def main() -> None:
     if not icon.isNull():
         application.setWindowIcon(icon)
     palette = QPalette()
-    from password_manager.ui.theme import ACCENT, ACCENT_INK, BG, BG_DEEP, SURFACE, SURFACE_2, TEXT
+    from password_manager.ui.theme import BG, BG_DEEP, TEXT
 
     palette.setColor(QPalette.ColorRole.Window, QColor(BG))
     palette.setColor(QPalette.ColorRole.WindowText, QColor(TEXT))
@@ -76,6 +75,11 @@ def main() -> None:
 
     controller.showWindowRequested.connect(lambda: _activate(window))
     controller.quitRequested.connect(application.quit)
+    # Safety net for every exit path (including Qt.quit() and the last window
+    # closing without a tray): lock the vault and wipe the clipboard one last
+    # time. prepareQuit is idempotent, so a second call after the QML closing
+    # handler is harmless.
+    application.aboutToQuit.connect(controller.prepareQuit)
     if instance is not None:
         instance.newConnection.connect(lambda: _activate(window))
 

@@ -1,11 +1,10 @@
-from pathlib import Path
 import sqlite3
+from pathlib import Path
 
 import pytest
 
 from password_manager.models import CredentialDraft, EntryDraft
 from password_manager.vault.repository import SCHEMA_VERSION, SQLCIPHER_KDF_ITER, VaultRepository, validate_entry_draft
-
 
 MASTER_PASSWORD = "correct horse battery staple"
 
@@ -167,6 +166,22 @@ def test_server_requires_valid_ip_and_uses_ip_when_name_empty(vault: VaultReposi
 
     assert entry.name == "192.0.2.15"
     assert entry.address == "192.0.2.15"
+
+
+def test_entry_credential_counts_serves_every_entry_in_one_query(vault: VaultRepository) -> None:
+    server = vault.save_entry(EntryDraft(kind="server", name="", address="192.0.2.9"))
+    app_entry = vault.save_entry(EntryDraft(kind="application", name="Portal"))
+    empty = vault.save_entry(EntryDraft(kind="application", name="Empty"))
+    vault.save_credential(server.id, CredentialDraft(kind="ssh", label="登录", password="a"))
+    vault.save_credential(server.id, CredentialDraft(kind="custom", label="MySQL", password="b"))
+    vault.save_credential(app_entry.id, CredentialDraft(kind="custom", label="主账号", password="c"))
+
+    counts = vault.entry_credential_counts()
+
+    # Entries without credentials produce no GROUP BY row; callers cover
+    # them with counts.get(entry_id, 0).
+    assert counts == {server.id: 2, app_entry.id: 1}
+    assert counts.get(empty.id, 0) == 0
 
 
 def test_delete_entry_cascades_its_credentials(vault: VaultRepository) -> None:

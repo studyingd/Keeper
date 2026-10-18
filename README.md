@@ -69,6 +69,8 @@ python3 main.py
 password-manager
 ```
 
+> **界面选择**：默认启动 QML 界面(`KEEPER_UI` 未设置或设为 `qml`)。旧版 Qt Widgets 界面仍在,用 `KEEPER_UI=widgets python main.py` 启动,但新功能只连在 QML 界面上,Widgets 版仅作后备。
+
 > **装不上 `sqlcipher3-wheels`?** 该依赖被钉在 `sqlcipher3-wheels==0.5.7`,它是预编译二进制轮子,只提供特定 Python 版本的 wheel。如果你的解释器版本没有对应轮子,安装会失败——请改用 3.11–3.14 之间的版本,或直接用仓库 `.python-version` 指定的 3.14。
 
 ### 指定保险库位置

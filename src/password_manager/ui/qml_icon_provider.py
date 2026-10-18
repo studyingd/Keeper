@@ -7,7 +7,7 @@ the exact paths from ui.icons, so widgets and QML never drift apart.
 
 from __future__ import annotations
 
-from PySide6.QtCore import QByteArray, QPointF, QRectF, QSize, Qt
+from PySide6.QtCore import QByteArray, QPointF, Qt
 from PySide6.QtGui import QColor, QImage, QPainter, QPixmap, QRadialGradient
 from PySide6.QtQuick import QQuickImageProvider
 from PySide6.QtSvg import QSvgRenderer
