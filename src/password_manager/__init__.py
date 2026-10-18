@@ -1,0 +1,1 @@
+"""Local password manager package."""

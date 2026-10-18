@@ -1,0 +1,1418 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Keeper — UI 重构预览 Demo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   Design tokens — OKLCH, neutrals tinted toward brand hue 235,
+   teal accent 185 carries over from Keeper's existing brand.
+   ============================================================ */
+:root {
+  --bg-deep:   oklch(0.145 0.016 235);
+  --bg:        oklch(0.170 0.018 235);
+  --surface:   oklch(0.205 0.020 235);
+  --surface-2: oklch(0.235 0.022 235);
+  --border:      oklch(0.300 0.025 235);
+  --border-soft: oklch(0.260 0.022 235);
+  --border-strong: oklch(0.380 0.030 235);
+
+  --text:       oklch(0.94 0.008 235);
+  --text-muted: oklch(0.68 0.020 235);
+  --text-faint: oklch(0.56 0.018 235);
+
+  --accent:        oklch(0.79 0.115 185);
+  --accent-strong: oklch(0.845 0.105 185);
+  --accent-deep:   oklch(0.28 0.055 210);
+  --accent-ink:    oklch(0.19 0.045 205);
+  --accent-dim:    oklch(0.79 0.115 185 / 0.14);
+
+  --ok:      oklch(0.78 0.15 155);
+  --warning: oklch(0.80 0.14 85);
+  --danger:  oklch(0.70 0.19 25);
+  --danger-dim: oklch(0.70 0.19 25 / 0.12);
+
+  --radius-sm: 8px; --radius-md: 12px; --radius-lg: 16px; --radius-xl: 20px;
+
+  --shadow-sm: 0 1px 2px oklch(0.10 0.02 235 / 0.45), 0 4px 10px oklch(0.10 0.02 235 / 0.30);
+  --shadow-md: 0 2px 4px oklch(0.10 0.02 235 / 0.35), 0 10px 24px oklch(0.10 0.02 235 / 0.38);
+  --shadow-lg: 0 4px 10px oklch(0.08 0.02 235 / 0.35), 0 24px 56px oklch(0.08 0.02 235 / 0.48);
+  --shadow-glow: 0 0 0 1px oklch(0.79 0.115 185 / 0.35), 0 8px 32px oklch(0.79 0.115 185 / 0.22);
+
+  --ease-out:   cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --dur-fast: 150ms; --dur-base: 250ms; --dur-slow: 400ms;
+
+  --font-body: "Inter", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-display: "Space Grotesk", "Noto Sans SC", sans-serif;
+  --font-mono: "JetBrains Mono", "Cascadia Mono", Consolas, monospace;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body { height: 100%; }
+
+body {
+  font-family: var(--font-body);
+  color: var(--text);
+  background:
+    radial-gradient(1200px 500px at 70% -10%, oklch(0.24 0.05 220 / 0.55), transparent 60%),
+    radial-gradient(900px 600px at 10% 110%, oklch(0.20 0.04 200 / 0.45), transparent 60%),
+    var(--bg-deep);
+  display: flex; flex-direction: column; align-items: center;
+  min-height: 100vh; padding: 22px 16px 40px;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ============ demo chrome (不属于应用本身) ============ */
+.demo-head {
+  width: min(1180px, 96vw); display: flex; align-items: center; gap: 18px;
+  margin-bottom: 18px; flex-wrap: wrap;
+}
+.demo-head h1 { font-family: var(--font-display); font-size: 17px; font-weight: 700; letter-spacing: -0.01em; }
+.demo-head .note { color: var(--text-faint); font-size: 12.5px; }
+.demo-tabs { margin-left: auto; display: flex; gap: 4px; background: var(--surface); border: 1px solid var(--border-soft); border-radius: 999px; padding: 4px; box-shadow: var(--shadow-sm); }
+.demo-tabs button {
+  font: 600 12.5px/1 var(--font-body); color: var(--text-muted);
+  background: transparent; border: none; border-radius: 999px; padding: 8px 16px;
+  cursor: pointer; transition: all var(--dur-fast) var(--ease-out);
+}
+.demo-tabs button:hover { color: var(--text); }
+.demo-tabs button.active { background: var(--accent); color: var(--accent-ink); box-shadow: 0 2px 8px oklch(0.79 0.115 185 / 0.35); }
+
+/* ============ 应用窗口 ============ */
+.app-window {
+  width: min(1180px, 96vw); height: 780px; max-height: calc(100vh - 130px);
+  background: var(--bg); border: 1px solid var(--border-soft); border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-lg); overflow: hidden; position: relative;
+  display: flex; flex-direction: column;
+}
+
+/* 假标题栏 */
+.titlebar {
+  height: 40px; flex: none; display: flex; align-items: center; gap: 10px;
+  padding: 0 14px; background: var(--bg-deep); border-bottom: 1px solid var(--border-soft);
+  user-select: none;
+}
+.titlebar .tb-title { font-size: 12.5px; color: var(--text-faint); margin-left: 12px; }
+.tb-controls { margin-left: auto; display: flex; gap: 2px; }
+.tb-controls button {
+  width: 40px; height: 28px; display: grid; place-items: center;
+  background: transparent; border: none; border-radius: 6px; color: var(--text-faint); cursor: default;
+  transition: all var(--dur-fast) var(--ease-out);
+}
+.tb-controls button:hover { background: var(--surface-2); color: var(--text); }
+.tb-controls button.tb-close:hover { background: var(--danger); color: white; }
+
+.app-body { flex: 1; display: flex; min-height: 0; position: relative; }
+
+/* ============ 侧边栏：三段式 ============ */
+.sidebar {
+  width: 292px; flex: none; display: flex; flex-direction: column; min-height: 0;
+  background: linear-gradient(180deg, oklch(0.215 0.022 235), oklch(0.185 0.020 235));
+  border-right: 1px solid var(--border-soft); padding: 18px 14px 14px;
+}
+
+/* 第一段：品牌 + 锁定 */
+.side-top { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+.brand { display: flex; align-items: center; gap: 10px; }
+.brand-mark {
+  width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center;
+  background: linear-gradient(140deg, oklch(0.85 0.10 185), oklch(0.62 0.12 205));
+  color: oklch(0.16 0.04 210); box-shadow: 0 4px 14px oklch(0.79 0.115 185 / 0.30);
+}
+.brand-name { font-family: var(--font-display); font-size: 16px; font-weight: 700; letter-spacing: -0.01em; display: block; line-height: 1.15; }
+.brand-sub { font-size: 11px; color: var(--text-faint); display: block; line-height: 1.3; }
+
+/* 第二段：资产区 */
+.search {
+  display: flex; align-items: center; gap: 8px; height: 38px;
+  background: var(--bg-deep); border: 1px solid var(--border-soft); border-radius: var(--radius-md);
+  padding: 0 12px; margin-bottom: 10px; transition: border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
+}
+.search:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
+.search svg { color: var(--text-faint); flex: none; }
+.search input { flex: 1; background: none; border: none; outline: none; color: var(--text); font: 400 13px var(--font-body); }
+.search input::placeholder { color: var(--text-faint); }
+
+.chips { display: flex; gap: 6px; margin-bottom: 12px; }
+.chip {
+  font: 600 12px var(--font-body); color: var(--text-muted); background: transparent;
+  border: 1px solid var(--border-soft); border-radius: 999px; padding: 5px 12px; cursor: pointer;
+  transition: all var(--dur-fast) var(--ease-out);
+}
+.chip:hover { color: var(--text); border-color: var(--border-strong); }
+.chip.active { color: var(--accent-ink); background: var(--accent); border-color: transparent; }
+.chip .count { opacity: 0.65; margin-left: 2px; font-variant-numeric: tabular-nums; }
+
+.add-row { display: flex; gap: 8px; margin-bottom: 12px; }
+/* 新增资产对话框：类型选择在对话框内 */
+.dialog-overlay {
+  position: absolute; inset: 0; display: none; place-items: center; z-index: 35;
+  background: oklch(0.10 0.015 235 / 0.55); backdrop-filter: blur(8px) saturate(1.2);
+}
+.dialog-overlay.active { display: grid; }
+.dialog {
+  width: min(480px, 92%); background: var(--surface); border: 1px solid var(--border);
+  border-top-color: oklch(1 0 0 / 0.10);
+  border-radius: var(--radius-xl); box-shadow: var(--shadow-lg); padding: 26px 28px 22px;
+  animation: dialogIn 320ms var(--ease-spring);
+}
+@keyframes dialogIn { from { opacity: 0; transform: scale(0.95) translateY(10px); } }
+.dialog-head { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 18px; }
+.dialog-head > div { flex: 1; }
+.dialog-title { font-family: var(--font-display); font-size: 21px; font-weight: 700; letter-spacing: -0.02em; }
+
+.type-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 18px; }
+.type-card {
+  display: flex; flex-direction: row; align-items: center; gap: 10px; text-align: left;
+  background: var(--bg-deep); border: 1.5px solid var(--border-soft); border-radius: var(--radius-lg);
+  padding: 13px 15px; cursor: pointer; color: var(--text);
+  transition: all var(--dur-fast) var(--ease-out);
+}
+.type-card:hover { border-color: var(--border-strong); transform: translateY(-1px); }
+.type-card.active {
+  border-color: var(--accent);
+  background: linear-gradient(165deg, var(--accent-deep), var(--bg-deep) 70%);
+  box-shadow: 0 0 0 3px var(--accent-dim);
+}
+.tc-icon {
+  width: 32px; height: 32px; border-radius: 9px; display: grid; place-items: center;
+  background: var(--surface-2); border: 1px solid var(--border-soft); color: var(--text-muted);
+  transition: all var(--dur-fast) var(--ease-out);
+}
+.type-card.active .tc-icon { color: var(--accent); border-color: oklch(0.79 0.115 185 / 0.4); }
+.tc-title { font-size: 14px; font-weight: 700; }
+
+.dialog-form { display: flex; flex-direction: column; gap: 13px; }
+.f-label { display: block; font-size: 12.5px; font-weight: 600; color: var(--text-muted); margin-bottom: 6px; }
+.f-input {
+  width: 100%; height: 40px; background: var(--bg-deep); border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md); padding: 0 13px; color: var(--text);
+  font: 400 13.5px var(--font-body); outline: none;
+  transition: border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
+}
+.f-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
+.f-input::placeholder { color: var(--text-faint); }
+
+.dialog-footer {
+  display: flex; align-items: center; justify-content: flex-end; gap: 9px; margin-top: 20px;
+  padding-top: 16px; border-top: 1px solid var(--border-soft);
+}
+/* 资产标签：输入、快捷点选、展示 */
+.tag-input {
+  display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+  background: var(--bg-deep); border: 1px solid var(--border-soft); border-radius: var(--radius-md);
+  padding: 7px 10px; cursor: text;
+  transition: border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
+}
+.tag-input:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
+.tag-input input {
+  flex: 1; min-width: 130px; height: 26px; background: none; border: none; outline: none;
+  color: var(--text); font: 400 13px var(--font-body);
+}
+.tag-input input::placeholder { color: var(--text-faint); }
+.tag-pill {
+  display: inline-flex; align-items: center; gap: 5px;
+  font: 600 11.5px var(--font-body); color: var(--accent);
+  background: var(--accent-dim); border: 1px solid oklch(0.79 0.115 185 / 0.35);
+  border-radius: 999px; padding: 3px 5px 3px 10px;
+  animation: pillIn 200ms var(--ease-spring);
+}
+@keyframes pillIn { from { opacity: 0; transform: scale(0.85); } }
+.tag-pill button {
+  width: 16px; height: 16px; display: grid; place-items: center; border-radius: 50%;
+  background: transparent; border: none; color: inherit; cursor: pointer; opacity: 0.6;
+  transition: all var(--dur-fast) var(--ease-out);
+}
+.tag-pill button:hover { opacity: 1; background: oklch(0.79 0.115 185 / 0.25); }
+.tag-suggest { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
+.tag-suggest button {
+  font: 500 11.5px var(--font-body); color: var(--text-faint);
+  background: none; border: 1px dashed var(--border-soft); border-radius: 999px;
+  padding: 4px 11px; cursor: pointer; transition: all var(--dur-fast) var(--ease-out);
+}
+.tag-suggest button:hover { color: var(--accent); border-color: oklch(0.79 0.115 185 / 0.45); border-style: solid; }
+.tag-suggest button.on { color: var(--accent-ink); background: var(--accent); border-color: var(--accent); border-style: solid; }
+
+/* 详情页与侧边栏的标签展示 */
+.hchip.tag { color: var(--accent); border-color: oklch(0.79 0.115 185 / 0.35); background: var(--accent-dim); cursor: pointer; }
+.hchip.tag:hover { border-color: var(--accent); }
+.hchip.tag::before { content: "#"; opacity: 0.75; font-weight: 700; }
+.asset-tags { display: flex; gap: 4px; margin-top: 4px; flex-wrap: wrap; }
+.asset-tags .mini-tag {
+  font: 500 10px var(--font-body); color: var(--text-faint);
+  border: 1px solid var(--border-soft); border-radius: 99px; padding: 1px 7px; line-height: 1.5;
+}
+.asset-tags .mini-tag.more { border-style: dashed; }
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  font: 600 13px var(--font-body); color: var(--text);
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-md);
+  padding: 9px 14px; cursor: pointer;
+  transition: all var(--dur-fast) var(--ease-out);
+}
+.btn:hover { background: oklch(0.27 0.024 235); border-color: var(--border-strong); transform: translateY(-1px); }
+.btn:active { transform: translateY(0) scale(0.98); }
+.btn:focus-visible, .icon-btn:focus-visible, .chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.btn.primary {
+  background: linear-gradient(180deg, oklch(0.86 0.10 185), oklch(0.78 0.115 187)); color: var(--accent-ink); border: none;
+  box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.25), 0 4px 14px oklch(0.79 0.115 185 / 0.30);
+}
+.btn.primary:hover { filter: brightness(1.05); }
+.btn.ghost { background: transparent; border-color: transparent; color: var(--text-muted); }
+.btn.ghost:hover { color: var(--text); background: var(--surface-2); }
+
+.asset-list { flex: 1; overflow-y: auto; min-height: 0; display: flex; flex-direction: column; gap: 2px; margin: 0 -6px; padding: 0 6px; }
+.group-label {
+  font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--text-faint); padding: 10px 10px 6px;
+}
+.asset-item {
+  display: flex; align-items: center; gap: 11px; padding: 9px 10px; border-radius: var(--radius-md);
+  background: transparent; border: none; cursor: pointer; text-align: left; width: 100%;
+  position: relative; transition: background var(--dur-fast) var(--ease-out);
+}
+.asset-item::before {
+  content: ""; position: absolute; left: -6px; top: 50%; transform: translateY(-50%) scaleY(0);
+  width: 3px; height: 60%; border-radius: 99px; background: var(--accent);
+  transition: transform var(--dur-base) var(--ease-spring);
+}
+.asset-item:hover { background: oklch(0.26 0.024 235 / 0.7); }
+.asset-item.active { background: oklch(0.28 0.045 220 / 0.55); }
+.asset-item.active::before { transform: translateY(-50%) scaleY(1); }
+.asset-icon {
+  width: 32px; height: 32px; flex: none; border-radius: 9px; display: grid; place-items: center;
+  background: var(--surface-2); border: 1px solid var(--border-soft); color: var(--text-muted);
+  transition: all var(--dur-fast) var(--ease-out);
+}
+.asset-item.active .asset-icon { border-color: oklch(0.79 0.115 185 / 0.4); color: var(--accent); }
+.asset-meta { flex: 1; min-width: 0; }
+.asset-name { font-size: 13px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.35; }
+.asset-sub { font-size: 11px; color: var(--text-faint); font-family: var(--font-mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.4; }
+.asset-count {
+  font: 600 10.5px var(--font-mono); color: var(--text-faint); background: var(--surface-2);
+  border: 1px solid var(--border-soft); padding: 2px 7px; border-radius: 99px; flex: none;
+}
+
+/* 第三段：保险库状态 + 工具 */
+.side-bottom { flex: none; margin-top: 10px; display: flex; flex-direction: column; gap: 9px; }
+.vault-status {
+  display: flex; align-items: center; gap: 9px; font-size: 12px; color: var(--text-muted);
+  background: var(--bg-deep); border: 1px solid var(--border-soft); border-radius: var(--radius-md);
+  padding: 9px 12px;
+}
+.status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); flex: none; box-shadow: 0 0 8px oklch(0.78 0.15 155 / 0.8); animation: pulse 2.4s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: 0.45; } }
+.side-tools { display: flex; gap: 8px; }
+.side-tools .btn { flex: 1; padding: 8px 10px; font-size: 12.5px; color: var(--text-muted); }
+
+/* ============ 主区域 ============ */
+.main {
+  flex: 1; min-width: 0; overflow-y: auto; position: relative;
+  background:
+    radial-gradient(700px 300px at 85% -5%, oklch(0.24 0.045 210 / 0.35), transparent 65%),
+    var(--bg);
+}
+.screen { display: none; padding: 30px 36px 36px; animation: screenIn var(--dur-slow) var(--ease-out); max-width: 980px; }
+.screen.active { display: block; }
+@keyframes screenIn { from { opacity: 0; transform: translateY(10px); } }
+
+.eyebrow { font-size: 11px; font-weight: 700; letter-spacing: 0.12em; color: var(--accent); margin-bottom: 6px; }
+.h1 { font-family: var(--font-display); font-size: 26px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.15; }
+.h1 .accent-word { color: var(--accent); }
+.sub { color: var(--text-muted); font-size: 13.5px; margin-top: 6px; }
+
+.page-head { display: flex; align-items: flex-start; gap: 16px; margin-bottom: 26px; }
+.page-head .grow { flex: 1; min-width: 0; }
+
+/* 统计卡片 */
+.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 22px; }
+.stat {
+  background: var(--surface); border: 1px solid var(--border-soft); border-radius: var(--radius-lg);
+  padding: 16px 18px; box-shadow: var(--shadow-sm); position: relative; overflow: hidden;
+  transition: all var(--dur-base) var(--ease-out);
+}
+.stat:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); border-color: var(--border); }
+.stat::after {
+  content: ""; position: absolute; inset: 0 0 auto 0; height: 2px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent); opacity: 0;
+  transition: opacity var(--dur-base) var(--ease-out);
+}
+.stat:hover::after { opacity: 0.7; }
+.stat .num { font-family: var(--font-display); font-size: 30px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.stat .cap { display: flex; align-items: center; gap: 6px; color: var(--text-muted); font-size: 12px; margin-top: 4px; }
+.stat .cap svg { color: var(--text-faint); }
+
+/* 主页两栏 */
+.home-grid { display: grid; grid-template-columns: 1.5fr 1fr; gap: 14px; align-items: start; }
+.card {
+  background: var(--surface); border: 1px solid var(--border-soft); border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm); padding: 20px 22px;
+}
+.card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+.card-head h2 { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
+.card-head .spacer { flex: 1; }
+
+/* 生成器 */
+.gen-result {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--bg-deep); border: 1px solid var(--border-soft); border-radius: var(--radius-md);
+  padding: 13px 14px; margin-bottom: 12px;
+  transition: border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
+}
+.gen-result:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
+.gen-value {
+  flex: 1; font-family: var(--font-mono); font-size: 17px; font-weight: 600; letter-spacing: 0.02em;
+  color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  animation: fadeIn var(--dur-base) var(--ease-out);
+}
+@keyframes fadeIn { from { opacity: 0; } }
+
+.strength { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+.strength .bars { display: flex; gap: 4px; flex: 1; }
+.strength .bar { height: 4px; flex: 1; border-radius: 99px; background: var(--surface-2); overflow: hidden; position: relative; }
+.strength .bar::after { content: ""; position: absolute; inset: 0; border-radius: 99px; transform: scaleX(0); transform-origin: left; transition: transform 500ms var(--ease-out); }
+.strength .bar.on::after { transform: scaleX(1); }
+.strength[data-level="1"] .bar.on::after { background: var(--danger); }
+.strength[data-level="2"] .bar.on::after { background: var(--warning); }
+.strength[data-level="3"] .bar.on::after { background: var(--accent); }
+.strength[data-level="4"] .bar.on::after { background: var(--ok); }
+.strength-label { font-size: 12px; font-weight: 600; min-width: 3.5em; text-align: right; }
+
+.char-toggles { display: flex; gap: 8px; flex-wrap: wrap; }
+.ctoggle {
+  display: inline-flex; align-items: center; gap: 7px;
+  font: 600 12.5px var(--font-body); color: var(--text-muted);
+  background: var(--bg-deep); border: 1px solid var(--border-soft); border-radius: 999px;
+  padding: 7px 14px; cursor: pointer;
+  transition: all var(--dur-fast) var(--ease-out);
+}
+.ctoggle:hover { border-color: var(--border-strong); color: var(--text); }
+.ctoggle:disabled { opacity: 0.45; cursor: not-allowed; }
+.ctoggle.active { color: var(--accent); border-color: oklch(0.79 0.115 185 / 0.45); background: var(--accent-dim); }
+.ct-check {
+  width: 14px; height: 14px; display: inline-grid; place-items: center; border-radius: 50%;
+  border: 1.5px solid currentColor; flex: none; transition: all var(--dur-fast) var(--ease-out);
+}
+.ctoggle.active .ct-check { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.ct-check svg { opacity: 0; transform: scale(0.6); transition: all var(--dur-fast) var(--ease-spring); }
+.ctoggle.active .ct-check svg { opacity: 1; transform: scale(1); }
+.ct-sample { font-family: var(--font-mono); font-size: 11px; opacity: 0.7; font-weight: 400; }
+
+/* 项目对话框内的密码行 */
+.pw-row { display: flex; align-items: center; gap: 8px; }
+.pw-row .f-input { flex: 1; font-family: var(--font-mono); letter-spacing: 0.03em; }
+.mini-len { width: 110px; }
+.mini-strength .bar { height: 3px; }
+
+.gen-controls { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.len-ctl { display: flex; align-items: center; gap: 10px; }
+.len-ctl label { font-size: 12.5px; color: var(--text-muted); font-weight: 600; }
+.len-ctl input[type=range] { width: 130px; accent-color: var(--accent); cursor: pointer; }
+.len-value {
+  font-family: var(--font-mono); font-size: 13px; font-weight: 600; width: 34px; height: 30px;
+  display: grid; place-items: center; background: var(--bg-deep); border: 1px solid var(--border-soft);
+  border-radius: 8px; font-variant-numeric: tabular-nums;
+}
+
+/* 最近访问 + 安全状态 */
+.stack { display: flex; flex-direction: column; gap: 14px; }
+.recent-item { display: flex; align-items: center; gap: 11px; padding: 9px 6px; border-radius: var(--radius-md); transition: background var(--dur-fast) var(--ease-out); cursor: pointer; }
+.recent-item:hover { background: oklch(0.26 0.024 235 / 0.6); }
+.recent-item .when { margin-left: auto; font-size: 11.5px; color: var(--text-faint); flex: none; }
+.recent-item .r-name { font-size: 13px; font-weight: 600; line-height: 1.35; }
+.recent-item .r-sub { font-size: 11.5px; color: var(--text-faint); line-height: 1.4; }
+
+.sec-item { display: flex; align-items: flex-start; gap: 10px; padding: 8px 0; font-size: 12.5px; color: var(--text-muted); line-height: 1.5; }
+.sec-item svg { color: var(--ok); flex: none; margin-top: 1px; }
+.sec-item b { color: var(--text); font-weight: 600; }
+
+/* ============ 详情页 ============ */
+.detail-head {
+  display: flex; align-items: flex-start; gap: 16px; margin-bottom: 24px;
+  padding-bottom: 22px; border-bottom: 1px solid var(--border-soft);
+}
+.tile {
+  width: 52px; height: 52px; flex: none; border-radius: 15px; display: grid; place-items: center;
+  background: linear-gradient(145deg, oklch(0.26 0.05 210), oklch(0.20 0.035 235));
+  border: 1px solid oklch(0.79 0.115 185 / 0.25); color: var(--accent); box-shadow: var(--shadow-sm);
+}
+.head-chips { display: flex; gap: 8px; margin-top: 9px; flex-wrap: wrap; }
+.head-actions { display: flex; gap: 9px; align-items: center; margin-left: auto; flex: none; }
+
+.hchip {
+  display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 500;
+  color: var(--text-muted); background: var(--surface); border: 1px solid var(--border-soft);
+  padding: 4px 11px; border-radius: 99px;
+}
+.hchip.mono { font-family: var(--font-mono); font-weight: 600; font-size: 11.5px; color: var(--text); }
+.hchip svg { color: var(--text-faint); }
+.hchip.ok { color: var(--ok); border-color: oklch(0.78 0.15 155 / 0.3); background: oklch(0.78 0.15 155 / 0.08); }
+
+/* 凭据卡 */
+.cred-list { display: flex; flex-direction: column; gap: 12px; }
+.cred-card {
+  background: var(--surface); border: 1px solid var(--border-soft); border-radius: var(--radius-lg);
+  padding: 16px 18px; box-shadow: var(--shadow-sm);
+  transition: all var(--dur-base) var(--ease-out); position: relative;
+}
+.cred-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); border-color: var(--border); }
+.cred-card.login { border-left: 3px solid var(--accent); }
+.cred-card.login:hover { border-color: var(--border); border-left: 3px solid var(--accent); }
+
+.cred-top { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+.cred-kind { width: 30px; height: 30px; flex: none; border-radius: 9px; display: grid; place-items: center; background: var(--surface-2); border: 1px solid var(--border-soft); color: var(--text-muted); }
+.cred-card.login .cred-kind { color: var(--accent); border-color: oklch(0.79 0.115 185 / 0.3); background: var(--accent-deep); }
+.cred-name { font-size: 14.5px; font-weight: 700; letter-spacing: -0.01em; }
+.badge {
+  font: 700 10px var(--font-body); letter-spacing: 0.06em; padding: 3px 8px; border-radius: 6px;
+  background: var(--accent-dim); color: var(--accent); flex: none;
+}
+.badge.plain { background: var(--surface-2); color: var(--text-faint); border: 1px solid var(--border-soft); }
+
+/* hover 才出现的低频操作 */
+.hover-actions { margin-left: auto; display: flex; gap: 3px; opacity: 0; transform: translateX(4px); transition: all var(--dur-fast) var(--ease-out); }
+.cred-card:hover .hover-actions, .detail-head:hover .hover-actions { opacity: 1; transform: none; }
+@media (hover: none) { .hover-actions { opacity: 1; transform: none; } }
+
+.icon-btn {
+  width: 30px; height: 30px; display: grid; place-items: center; border-radius: 8px;
+  background: transparent; border: none; color: var(--text-faint); cursor: pointer;
+  transition: all var(--dur-fast) var(--ease-out); flex: none;
+}
+.icon-btn:hover { background: var(--surface-2); color: var(--text); }
+.icon-btn:active { transform: scale(0.92); }
+.icon-btn.danger:hover { background: var(--danger-dim); color: var(--danger); }
+.icon-btn.bordered { background: var(--surface-2); border: 1px solid var(--border); color: var(--text-muted); }
+.icon-btn.bordered:hover { border-color: var(--border-strong); color: var(--text); }
+
+.cred-user { display: flex; align-items: center; gap: 10px; margin: 2px 0 2px 40px; flex-wrap: wrap; }
+.cred-user .u { font-family: var(--font-mono); font-size: 12.5px; color: var(--text-muted); font-weight: 600; }
+.cred-user .sep { color: var(--border-strong); }
+.cred-user .ex { font-size: 12px; color: var(--text-faint); font-family: var(--font-mono); }
+.pw-dots { font-family: var(--font-mono); font-size: 12.5px; letter-spacing: 0.15em; color: var(--text-faint); }
+.pw-dots.revealed { color: var(--text); letter-spacing: 0.02em; }
+
+.cred-actions { display: flex; align-items: center; gap: 8px; margin: 10px 0 0 40px; flex-wrap: wrap; }
+.cred-actions .btn { padding: 7px 13px; font-size: 12.5px; }
+
+/* 空状态 */
+.empty-state {
+  border: 1.5px dashed var(--border); border-radius: var(--radius-lg); padding: 34px 20px;
+  text-align: center; color: var(--text-faint);
+}
+.empty-state svg { color: var(--text-faint); margin-bottom: 10px; }
+.empty-state p { font-size: 13px; line-height: 1.6; }
+.empty-state b { color: var(--text-muted); }
+
+/* ============ 锁定层 ============ */
+.lock-layer {
+  position: absolute; inset: 0; display: none; place-items: center; z-index: 30;
+  background: oklch(0.12 0.015 235 / 0.82); backdrop-filter: blur(14px) saturate(1.2);
+}
+.lock-layer.active { display: grid; }
+.lock-panel { text-align: center; max-width: 420px; padding: 0 24px; animation: lockIn 400ms var(--ease-spring); }
+@keyframes lockIn { from { opacity: 0; transform: scale(0.94) translateY(8px); } }
+.lock-mark {
+  width: 64px; height: 64px; margin: 0 auto 18px; border-radius: 19px; display: grid; place-items: center;
+  background: linear-gradient(145deg, oklch(0.30 0.06 210), oklch(0.22 0.04 235));
+  border: 1px solid oklch(0.79 0.115 185 / 0.3); color: var(--accent); box-shadow: var(--shadow-glow);
+}
+.lock-panel h2 { font-family: var(--font-display); font-size: 24px; letter-spacing: -0.02em; margin-bottom: 10px; }
+.lock-panel p { color: var(--text-muted); font-size: 13.5px; line-height: 1.7; margin-bottom: 22px; }
+.lock-panel .btn.primary { padding: 11px 26px; font-size: 14px; }
+.lock-panel .hint { font-size: 11.5px; color: var(--text-faint); margin-top: 16px; margin-bottom: 0; }
+
+/* ============ Toast ============ */
+.toast-wrap { position: absolute; right: 20px; bottom: 20px; z-index: 40; display: flex; flex-direction: column; gap: 8px; align-items: flex-end; }
+.toast {
+  display: flex; align-items: center; gap: 10px; padding: 11px 16px; border-radius: var(--radius-md);
+  background: oklch(0.25 0.025 235 / 0.95); border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-lg); font-size: 13px; font-weight: 500;
+  animation: toastIn 350ms var(--ease-spring);
+}
+.toast svg { color: var(--accent); }
+.toast.out { animation: toastOut 300ms var(--ease-out) forwards; }
+@keyframes toastIn { from { opacity: 0; transform: translateY(12px) scale(0.96); } }
+@keyframes toastOut { to { opacity: 0; transform: translateY(8px); } }
+
+/* 滚动条 */
+::-webkit-scrollbar { width: 10px; }
+::-webkit-scrollbar-thumb { background: var(--surface-2); border-radius: 99px; border: 2.5px solid var(--bg); }
+::-webkit-scrollbar-thumb:hover { background: var(--border-strong); }
+::-webkit-scrollbar-track { background: transparent; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+
+@media (max-width: 900px) {
+  .stats { grid-template-columns: repeat(2, 1fr); }
+  .home-grid { grid-template-columns: 1fr; }
+  .sidebar { width: 250px; }
+}
+</style>
+</head>
+<body>
+
+<!-- ============ Demo 切换栏（不属于应用） ============ -->
+<div class="demo-head">
+  <h1>Keeper · UI 重构预览</h1>
+  <span class="note">演示数据，所有凭据均为虚构；侧边栏资产与标签可点击</span>
+  <div class="demo-tabs" id="demoTabs">
+    <button data-screen="home" class="active">总览</button>
+    <button data-screen="server">服务器详情</button>
+    <button data-screen="app">应用详情</button>
+    <button data-screen="lock">锁定状态</button>
+  </div>
+</div>
+
+<div class="app-window" id="appWindow">
+  <!-- 假标题栏 -->
+  <div class="titlebar">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--accent)"><path d="M12 22s8-4 8-10V6l-8-3-8 3v6c0 6 8 10 8 10z"/></svg>
+    <span class="tb-title">Keeper — 本地加密密码管理器</span>
+    <div class="tb-controls">
+      <button title="最小化"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/></svg></button>
+      <button title="最大化"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="5" width="14" height="14" rx="2"/></svg></button>
+      <button title="关闭" class="tb-close"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+    </div>
+  </div>
+
+  <div class="app-body">
+    <!-- ============ 侧边栏 ============ -->
+    <aside class="sidebar">
+      <!-- 第一段：品牌 + 全局 -->
+      <div class="side-top">
+        <div class="brand">
+          <div class="brand-mark">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 22s8-4 8-10V6l-8-3-8 3v6c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+          <div>
+            <span class="brand-name">Keeper</span>
+            <span class="brand-sub">本地加密保险库</span>
+          </div>
+        </div>
+        <button class="icon-btn bordered" id="lockBtn" title="锁定保险库" style="margin-left: auto">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+        </button>
+      </div>
+
+      <!-- 第二段：资产区 -->
+      <div class="search">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/></svg>
+        <input id="searchInput" type="text" placeholder="搜索名称或 IP…">
+      </div>
+      <div class="chips" id="chips">
+        <button class="chip active" data-kind="all">全部 <span class="count">6</span></button>
+        <button class="chip" data-kind="server">服务器 <span class="count">3</span></button>
+        <button class="chip" data-kind="application">应用 <span class="count">3</span></button>
+      </div>
+      <div class="add-row">
+        <button class="btn primary" id="addBtn" style="width: 100%;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+          新增资产
+        </button>
+      </div>
+
+      <nav class="asset-list" id="assetList">
+        <div class="group-label">服务器</div>
+
+        <button class="asset-item" data-kind="server" data-screen="server" data-name="生产数据库服务器" data-tags="mysql 生产环境 数据库" data-sub="192.168.1.101:2222">
+          <div class="asset-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="2" y="3" width="20" height="7" rx="2"/><rect x="2" y="14" width="20" height="7" rx="2"/><path d="M6 6.5h.01M6 17.5h.01" stroke-linecap="round" stroke-width="2.4"/></svg></div>
+          <div class="asset-meta"><div class="asset-name">生产数据库服务器</div><div class="asset-sub">192.168.1.101:2222</div><div class="asset-tags"><span class="mini-tag">MySQL</span><span class="mini-tag">生产环境</span><span class="mini-tag more">+1</span></div></div>
+          <span class="asset-count">3</span>
+        </button>
+
+        <button class="asset-item" data-kind="server" data-screen="server" data-name="Web 前端机" data-tags="nginx 前端" data-sub="172.16.8.20">
+          <div class="asset-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="2" y="3" width="20" height="7" rx="2"/><rect x="2" y="14" width="20" height="7" rx="2"/><path d="M6 6.5h.01M6 17.5h.01" stroke-linecap="round" stroke-width="2.4"/></svg></div>
+          <div class="asset-meta"><div class="asset-name">Web 前端机</div><div class="asset-sub">172.16.8.20</div><div class="asset-tags"><span class="mini-tag">Nginx</span><span class="mini-tag">前端</span></div></div>
+          <span class="asset-count">2</span>
+        </button>
+
+        <button class="asset-item" data-kind="server" data-screen="server" data-name="公司 NAS" data-tags="存储 备份" data-sub="10.0.0.8">
+          <div class="asset-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="2" y="3" width="20" height="7" rx="2"/><rect x="2" y="14" width="20" height="7" rx="2"/><path d="M6 6.5h.01M6 17.5h.01" stroke-linecap="round" stroke-width="2.4"/></svg></div>
+          <div class="asset-meta"><div class="asset-name">公司 NAS</div><div class="asset-sub">10.0.0.8</div><div class="asset-tags"><span class="mini-tag">存储</span><span class="mini-tag">备份</span></div></div>
+          <span class="asset-count">2</span>
+        </button>
+
+        <div class="group-label">应用</div>
+
+        <button class="asset-item" data-kind="application" data-screen="app" data-name="阿里云" data-tags="云平台 工作" data-sub="console.aliyun.com">
+          <div class="asset-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18z"/></svg></div>
+          <div class="asset-meta"><div class="asset-name">阿里云</div><div class="asset-sub">console.aliyun.com</div><div class="asset-tags"><span class="mini-tag">云平台</span><span class="mini-tag">工作</span></div></div>
+          <span class="asset-count">2</span>
+        </button>
+
+        <button class="asset-item" data-kind="application" data-screen="app" data-name="OpenAI" data-tags="ai" data-sub="chat.openai.com">
+          <div class="asset-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18z"/></svg></div>
+          <div class="asset-meta"><div class="asset-name">OpenAI</div><div class="asset-sub">chat.openai.com</div><div class="asset-tags"><span class="mini-tag">AI</span></div></div>
+          <span class="asset-count">1</span>
+        </button>
+
+        <button class="asset-item" data-kind="application" data-screen="app" data-name="GitHub" data-tags="开发 代码托管" data-sub="github.com">
+          <div class="asset-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18z"/></svg></div>
+          <div class="asset-meta"><div class="asset-name">GitHub</div><div class="asset-sub">github.com</div><div class="asset-tags"><span class="mini-tag">开发</span><span class="mini-tag">代码扙管</span></div></div>
+          <span class="asset-count">2</span>
+        </button>
+      </nav>
+
+      <!-- 第三段：保险库状态 + 工具 -->
+      <div class="side-bottom">
+        <div class="vault-status">
+          <span class="status-dot"></span>
+          <span>保险库已解锁 · <span style="color: var(--text)">10 分钟</span>无操作自动锁定</span>
+        </div>
+        <div class="side-tools">
+          <button class="btn" id="exportBtn">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5M12 15V3"/></svg>
+            导出 Excel
+          </button>
+          <button class="btn" id="rekeyBtn">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="4"/><path d="M10.8 12.2 20 3M17 3h3v3"/></svg>
+            修改主密码
+          </button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ============ 主区域 ============ -->
+    <main class="main" id="main">
+
+      <!-- ===== 屏幕 1：总览 ===== -->
+      <section class="screen active" data-screen="home">
+        <header class="page-head">
+          <div class="grow">
+            <p class="eyebrow">保险库总览</p>
+            <h1 class="h1">一切<span class="accent-word">安全</span>，一切就绪</h1>
+            <p class="sub">3 台服务器 · 3 个应用 · 10 条凭据，整库 SQLCipher 加密</p>
+          </div>
+          <div class="head-actions">
+            <button class="btn ghost" id="homeGenLink">↓ 前往生成器</button>
+          </div>
+        </header>
+
+        <div class="stats">
+          <div class="stat">
+            <div class="num">3</div>
+            <div class="cap"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="7" rx="2"/><rect x="2" y="14" width="20" height="7" rx="2"/></svg>服务器</div>
+          </div>
+          <div class="stat">
+            <div class="num">3</div>
+            <div class="cap"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/></svg>应用</div>
+          </div>
+          <div class="stat">
+            <div class="num">10</div>
+            <div class="cap"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>凭据总数</div>
+          </div>
+          <div class="stat">
+            <div class="num">10<small style="font-size:14px; color: var(--text-faint)"> 分钟</small></div>
+            <div class="cap"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3" stroke-linecap="round"/></svg>自动锁定</div>
+          </div>
+        </div>
+
+        <div class="home-grid">
+          <!-- 生成器 -->
+          <div class="card" id="generatorCard">
+            <div class="card-head">
+              <h2>随机密码生成器</h2>
+              <div class="spacer"></div>
+              <button class="icon-btn bordered" id="regenBtn" title="重新生成">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36M21 3v6h-6"/></svg>
+              </button>
+            </div>
+            <div class="gen-result">
+              <span class="gen-value" id="genValue">Xk9#mP2$vL7@qW</span>
+              <button class="icon-btn" id="copyGenBtn" title="复制（30 秒后自动清除）">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              </button>
+            </div>
+            <div class="strength" id="strength" data-level="0">
+              <div class="bars"><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div></div>
+              <span class="strength-label" id="strengthLabel">强</span>
+            </div>
+            <div class="gen-controls">
+              <div class="char-toggles" id="charToggles">
+                <button type="button" class="ctoggle active" data-set="digits"><span class="ct-check"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>数字 <span class="ct-sample">0-9</span></button>
+                <button type="button" class="ctoggle active" data-set="letters"><span class="ct-check"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>英文 <span class="ct-sample">aA</span></button>
+                <button type="button" class="ctoggle active" data-set="symbols"><span class="ct-check"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>符号 <span class="ct-sample">!@#</span></button>
+              </div>
+              <div class="len-ctl">
+                <label>长度</label>
+                <input type="range" id="lenRange" min="1" max="128" value="12">
+                <span class="len-value" id="lenValue">12</span>
+              </div>
+              <button class="btn primary" id="genBtn" style="margin-left: auto">生成密码</button>
+            </div>
+          </div>
+
+          <!-- 右列：最近访问 + 安全状态 -->
+          <div class="stack">
+            <div class="card">
+              <div class="card-head"><h2>最近访问</h2><div class="spacer"></div></div>
+              <div class="recent-item">
+                <div class="asset-icon" style="width:28px;height:28px;border-radius:8px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.66 3.58 3 8 3s8-1.34 8-3V5M4 12c0 1.66 3.58 3 8 3s8-1.34 8-3"/></svg></div>
+                <div><div class="r-name">生产数据库服务器 · MySQL</div><div class="r-sub">复制了密码</div></div>
+                <span class="when">刚刚</span>
+              </div>
+              <div class="recent-item">
+                <div class="asset-icon" style="width:28px;height:28px;border-radius:8px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/></svg></div>
+                <div><div class="r-name">阿里云 · 主账号</div><div class="r-sub">访问了网站</div></div>
+                <span class="when">2 小时前</span>
+              </div>
+              <div class="recent-item">
+                <div class="asset-icon" style="width:28px;height:28px;border-radius:8px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 17l6-6-6-6M12 19h8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+                <div><div class="r-name">Web 前端机 · 系统登录账号</div><div class="r-sub">SSH 连接</div></div>
+                <span class="when">昨天</span>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-head"><h2>安全状态</h2><div class="spacer"></div></div>
+              <div class="sec-item"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><span><b>整库加密</b> — SQLCipher 4 · PBKDF2 512,000 次迭代</span></div>
+              <div class="sec-item"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><span><b>剪贴板保护</b> — 复制后 30 秒自动清除</span></div>
+              <div class="sec-item"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><span><b>离线运行</b> — 不联网、不同步、无云端副本</span></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== 屏幕 2：服务器详情 ===== -->
+      <section class="screen" data-screen="server">
+        <header class="detail-head">
+          <div class="tile">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="3" width="20" height="7" rx="2"/><rect x="2" y="14" width="20" height="7" rx="2"/><path d="M6 6.5h.01M6 17.5h.01" stroke-linecap="round" stroke-width="2.4"/></svg>
+          </div>
+          <div class="grow">
+            <p class="eyebrow">服务器工作区</p>
+            <h1 class="h1">生产数据库服务器</h1>
+            <div class="head-chips">
+              <span class="hchip mono"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/></svg>192.168.1.101:2222</span>
+              <span class="hchip">3 个项目</span>
+              <span class="hchip ok"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>SSH 就绪</span>
+              <span class="hchip tag" data-tag="MySQL">MySQL</span>
+              <span class="hchip tag" data-tag="生产环境">生产环境</span>
+              <span class="hchip tag" data-tag="数据库">数据库</span>
+            </div>
+          </div>
+          <div class="head-actions">
+            <div class="hover-actions" style="position: static; opacity: 1; transform: none;">
+              <button class="icon-btn bordered" title="编辑资产"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg></button>
+              <button class="icon-btn bordered danger" title="删除资产"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button>
+            </div>
+            <button class="btn">+ 系统登录</button>
+            <button class="btn primary new-cred-btn">+ 新增项目</button>
+          </div>
+        </header>
+
+        <div class="cred-list">
+          <!-- 系统登录卡（强调态） -->
+          <article class="cred-card login">
+            <div class="cred-top">
+              <div class="cred-kind"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17l6-6-6-6M12 19h8"/></svg></div>
+              <span class="cred-name">系统登录账号</span>
+              <span class="badge">系统登录 · SSH</span>
+              <div class="hover-actions">
+                <button class="icon-btn" title="上移"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 15l-6-6-6 6"/></svg></button>
+                <button class="icon-btn" title="下移"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>
+                <button class="icon-btn" title="编辑"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg></button>
+                <button class="icon-btn danger" title="删除"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button>
+              </div>
+            </div>
+            <div class="cred-user">
+              <span class="u">root</span>
+              <span class="sep">·</span>
+              <span class="pw-dots" data-pw="Kq8!tR3#zX9@">••••••••••••</span>
+              <button class="icon-btn pw-toggle" title="显示 / 隐藏密码" style="width:24px;height:24px">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+              </button>
+            </div>
+            <div class="cred-actions">
+              <button class="btn primary ssh-btn">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17l6-6-6-6M12 19h8"/></svg>
+                SSH 连接
+              </button>
+              <button class="btn copy-btn" data-copy="Kq8!tR3#zX9@">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                复制密码
+              </button>
+              <button class="btn copy-btn" data-copy="root">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                复制用户名
+              </button>
+            </div>
+          </article>
+
+          <!-- 普通项目卡 -->
+          <article class="cred-card">
+            <div class="cred-top">
+              <div class="cred-kind"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.66 3.58 3 8 3s8-1.34 8-3V5M4 12c0 1.66 3.58 3 8 3s8-1.34 8-3"/></svg></div>
+              <span class="cred-name">MySQL</span>
+              <span class="badge plain">自定义</span>
+              <div class="hover-actions">
+                <button class="icon-btn" title="上移"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 15l-6-6-6 6"/></svg></button>
+                <button class="icon-btn" title="下移"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>
+                <button class="icon-btn" title="编辑"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg></button>
+                <button class="icon-btn danger" title="删除"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button>
+              </div>
+            </div>
+            <div class="cred-user">
+              <span class="u">db_admin</span>
+              <span class="sep">·</span>
+              <span class="pw-dots" data-pw="Vn2$kP8!wQ5&">••••••••••••</span>
+              <button class="icon-btn pw-toggle" title="显示 / 隐藏密码" style="width:24px;height:24px">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+              </button>
+            </div>
+            <div class="cred-actions">
+              <button class="btn copy-btn" data-copy="Vn2$kP8!wQ5&">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                复制密码
+              </button>
+              <button class="btn copy-btn" data-copy="db_admin">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                复制用户名
+              </button>
+            </div>
+          </article>
+
+          <!-- 带网址的项目卡 -->
+          <article class="cred-card">
+            <div class="cred-top">
+              <div class="cred-kind"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18z"/></svg></div>
+              <span class="cred-name">网站后台</span>
+              <span class="badge plain">自定义</span>
+              <div class="hover-actions">
+                <button class="icon-btn" title="上移"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 15l-6-6-6 6"/></svg></button>
+                <button class="icon-btn" title="下移"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>
+                <button class="icon-btn" title="编辑"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg></button>
+                <button class="icon-btn danger" title="删除"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button>
+              </div>
+            </div>
+            <div class="cred-user">
+              <span class="u">admin</span>
+              <span class="sep">·</span>
+              <span class="ex">https://admin.example.com</span>
+            </div>
+            <div class="cred-actions">
+              <button class="btn primary visit-btn">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6M10 14 21 3"/></svg>
+                访问网站
+              </button>
+              <button class="btn copy-btn" data-copy="Hj7@bN4$mZ1!">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                复制密码
+              </button>
+              <button class="btn copy-btn" data-copy="admin">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                复制用户名
+              </button>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <!-- ===== 屏幕 3：应用详情 ===== -->
+      <section class="screen" data-screen="app">
+        <header class="detail-head">
+          <div class="tile">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18z"/></svg>
+          </div>
+          <div class="grow">
+            <p class="eyebrow">应用</p>
+            <h1 class="h1">阿里云</h1>
+            <div class="head-chips">
+              <span class="hchip mono">console.aliyun.com</span>
+              <span class="hchip">2 个项目</span>
+              <span class="hchip tag" data-tag="云平台">云平台</span>
+              <span class="hchip tag" data-tag="工作">工作</span>
+            </div>
+          </div>
+          <div class="head-actions">
+            <div class="hover-actions" style="position: static; opacity: 1; transform: none;">
+              <button class="icon-btn bordered" title="编辑应用"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg></button>
+              <button class="icon-btn bordered danger" title="删除应用"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button>
+            </div>
+            <button class="btn visit-btn">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6M10 14 21 3"/></svg>
+              打开网站
+            </button>
+            <button class="btn primary new-cred-btn">+ 新增项目</button>
+          </div>
+        </header>
+
+        <div class="cred-list">
+          <article class="cred-card">
+            <div class="cred-top">
+              <div class="cred-kind"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6 8-6s8 2 8 6" stroke-linecap="round"/></svg></div>
+              <span class="cred-name">主账号</span>
+              <span class="badge plain">自定义</span>
+              <div class="hover-actions">
+                <button class="icon-btn" title="上移"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 15l-6-6-6 6"/></svg></button>
+                <button class="icon-btn" title="下移"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>
+                <button class="icon-btn" title="编辑"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg></button>
+                <button class="icon-btn danger" title="删除"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button>
+              </div>
+            </div>
+            <div class="cred-user">
+              <span class="u">ops@example.com</span>
+              <span class="sep">·</span>
+              <span class="pw-dots" data-pw="Ft6&yG0!wS3#">••••••••••••</span>
+              <button class="icon-btn pw-toggle" title="显示 / 隐藏密码" style="width:24px;height:24px">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+              </button>
+            </div>
+            <div class="cred-actions">
+              <button class="btn copy-btn" data-copy="Ft6&yG0!wS3#">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                复制密码
+              </button>
+              <button class="btn copy-btn" data-copy="ops@example.com">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                复制用户名
+              </button>
+            </div>
+          </article>
+
+          <!-- 空状态示例 -->
+          <div class="empty-state">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            <p><b>RAM 子账号还没有保存任何项目</b><br>点右上角「+ 新增项目」为它添加第一条凭据</p>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- ===== 锁定层（覆盖整个应用） ===== -->
+    <div class="lock-layer" id="lockLayer">
+      <div class="lock-panel">
+        <div class="lock-mark">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+        </div>
+        <h2>保险库已锁定</h2>
+        <p>你的数据一条都没丢 —— 它们仍完整保存在本地加密文件中。<br>输入主密码即可重新加载全部资产与项目。</p>
+        <button class="btn primary" id="unlockBtn">解锁保险库</button>
+        <p class="hint">关闭窗口时 Keeper 会驻留系统托盘，10 分钟后自动锁定</p>
+      </div>
+    </div>
+
+    <!-- ===== 新增资产对话框：类型选择在对话框内 ===== -->
+    <div class="dialog-overlay" id="assetDialog">
+      <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="dlgTitle">
+        <div class="dialog-head">
+          <div>
+            <p class="eyebrow">新增资产</p>
+            <h2 class="dialog-title" id="dlgTitle">新增服务器</h2>
+          </div>
+          <button class="icon-btn bordered" id="dlgClose" title="关闭">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+
+        <div class="type-cards" id="typeCards">
+          <button type="button" class="type-card active" data-kind="server">
+            <span class="tc-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="2" y="3" width="20" height="7" rx="2"/><rect x="2" y="14" width="20" height="7" rx="2"/><path d="M6 6.5h.01M6 17.5h.01" stroke-linecap="round" stroke-width="2.4"/></svg></span>
+            <span class="tc-title">服务器</span>
+          </button>
+          <button type="button" class="type-card" data-kind="application">
+            <span class="tc-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18z"/></svg></span>
+            <span class="tc-title">应用</span>
+          </button>
+        </div>
+
+        <div class="dialog-form">
+          <div class="field">
+            <label class="f-label" for="fName" id="fNameLabel">显示名称（可选）</label>
+            <input class="f-input" id="fName" type="text" placeholder="如：生产数据库服务器">
+          </div>
+          <div class="field">
+            <label class="f-label" for="fAddr" id="fAddrLabel">服务器 IP</label>
+            <input class="f-input" id="fAddr" type="text" placeholder="如：192.168.1.101 或 192.168.1.101:2222">
+          </div>
+          <div class="field">
+            <label class="f-label" id="fTagsLabel" for="fTags">服务标签（可选）</label>
+            <div class="tag-input" id="tagInputBox">
+              <input id="fTags" type="text" placeholder="输入后回车添加，如 MySQL、生产环境">
+            </div>
+            <div class="tag-suggest" id="tagSuggest"></div>
+          </div>
+        </div>
+
+        <div class="dialog-footer">
+          <button class="btn" id="dlgCancel">取消</button>
+          <button class="btn primary" id="dlgSave">保存服务器</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== 新增项目对话框：内置同款生成器 ===== -->
+    <div class="dialog-overlay" id="credDialog">
+      <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="credTitle">
+        <div class="dialog-head">
+          <div>
+            <p class="eyebrow">服务器 · 生产数据库服务器</p>
+            <h2 class="dialog-title" id="credTitle">新增项目</h2>
+          </div>
+          <button class="icon-btn bordered" id="credClose" title="关闭">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+
+        <div class="dialog-form">
+          <div class="field">
+            <label class="f-label" for="credName">项目名称</label>
+            <input class="f-input" id="credName" type="text" placeholder="如：MySQL、网站后台">
+          </div>
+          <div class="field">
+            <label class="f-label" for="credUser">用户名（可选）</label>
+            <input class="f-input" id="credUser" type="text" placeholder="如：root / db_admin">
+          </div>
+          <div class="field">
+            <label class="f-label" for="credPw">密码</label>
+            <div class="pw-row">
+              <input class="f-input" id="credPw" type="password" placeholder="点「生成」或直接输入">
+              <button class="icon-btn bordered" id="credEye" title="显示 / 隐藏密码">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+              </button>
+              <button class="btn primary" id="credGen">生成</button>
+            </div>
+            <div class="char-toggles" id="credToggles" style="margin-top: 11px;">
+              <button type="button" class="ctoggle active" data-set="digits"><span class="ct-check"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>数字 <span class="ct-sample">0-9</span></button>
+              <button type="button" class="ctoggle active" data-set="letters"><span class="ct-check"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>英文 <span class="ct-sample">aA</span></button>
+              <button type="button" class="ctoggle active" data-set="symbols"><span class="ct-check"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>符号 <span class="ct-sample">!@#</span></button>
+            </div>
+            <div class="len-ctl" style="margin-top: 11px;">
+              <label>长度</label>
+              <input type="range" id="credLen" class="mini-len" min="1" max="128" value="12">
+              <span class="len-value" id="credLenValue">12</span>
+            </div>
+            <div class="strength mini-strength" id="credStrength" data-level="0" style="margin-top: 11px; margin-bottom: 0;">
+              <div class="bars"><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div></div>
+              <span class="strength-label" id="credStrengthLabel">—</span>
+            </div>
+          </div>
+          <div class="field">
+            <label class="f-label" for="credExtra">说明 / 网站地址（可选）</label>
+            <input class="f-input" id="credExtra" type="text" placeholder="如：https://admin.example.com">
+          </div>
+        </div>
+
+        <div class="dialog-footer">
+          <button class="btn" id="credCancel">取消</button>
+          <button class="btn primary" id="credSave">保存项目</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Toast -->
+    <div class="toast-wrap" id="toastWrap"></div>
+  </div>
+</div>
+
+<script>
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+
+/* ---------- 屏幕切换 ---------- */
+const screens = $$('.screen');
+const tabs = $$('#demoTabs button');
+function showScreen(name) {
+  screens.forEach(s => s.classList.toggle('active', s.dataset.screen === name));
+  tabs.forEach(t => t.classList.toggle('active', t.dataset.screen === name));
+  if (name === 'lock') lock();
+  else unlock();
+}
+tabs.forEach(t => t.addEventListener('click', () => showScreen(t.dataset.screen)));
+
+/* ---------- 侧边栏资产点击 → 对应详情 ---------- */
+$$('.asset-item').forEach(item => {
+  item.addEventListener('click', () => {
+    $$('.asset-item').forEach(i => i.classList.remove('active'));
+    item.classList.add('active');
+    showScreen(item.dataset.screen);
+  });
+});
+
+/* ---------- 搜索 / 筛选 ---------- */
+const searchInput = $('#searchInput');
+const chipBtns = $$('#chips .chip');
+let kindFilter = 'all';
+function applyFilter() {
+  const q = searchInput.value.trim().toLowerCase();
+  $$('.asset-item').forEach(item => {
+    const hit = (kindFilter === 'all' || item.dataset.kind === kindFilter)
+      && (!q || item.dataset.name.toLowerCase().includes(q) || item.dataset.sub.toLowerCase().includes(q) || (item.dataset.tags || '').toLowerCase().includes(q));
+    item.style.display = hit ? '' : 'none';
+  });
+  $$('.group-label').forEach(label => {
+    const group = label.textContent.trim();
+    const kind = group === '服务器' ? 'server' : 'application';
+    const anyVisible = $$('.asset-item').some(i => i.dataset.kind === kind && i.style.display !== 'none');
+    label.style.display = anyVisible ? '' : 'none';
+  });
+}
+searchInput.addEventListener('input', applyFilter);
+chipBtns.forEach(c => c.addEventListener('click', () => {
+  chipBtns.forEach(x => x.classList.remove('active'));
+  c.classList.add('active');
+  kindFilter = c.dataset.kind;
+  applyFilter();
+}));
+
+/* ---------- 锁定 / 解锁 ---------- */
+const lockLayer = $('#lockLayer');
+function lock() { lockLayer.classList.add('active'); }
+function unlock() { lockLayer.classList.remove('active'); }
+$('#lockBtn').addEventListener('click', () => showScreen('lock'));
+$('#unlockBtn').addEventListener('click', () => { unlock(); showScreen('home'); toast('保险库已解锁，数据全部加载完成'); });
+
+/* ---------- Toast ---------- */
+function toast(msg) {
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>${msg}`;
+  $('#toastWrap').appendChild(el);
+  setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 320); }, 2600);
+}
+
+/* ---------- 密码生成器：字符集自由勾选 + 熵值强度（首页与项目对话框共用） ---------- */
+const CHAR_SETS = {
+  digits: '0123456789',
+  letters: 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ',
+  symbols: '!#$%&()*+,-./:;<=>?@[]^_{|}~',
+};
+const STRENGTH_LABELS = ['弱', '中', '强', '极强'];
+function poolSize(sets) { return sets.reduce((n, k) => n + CHAR_SETS[k].length, 0); }
+function entropyBits(len, sets) { return len * Math.log2(poolSize(sets)); }
+function strengthLevel(bits) { return bits < 36 ? 1 : bits < 60 ? 2 : bits < 90 ? 3 : 4; }
+function setStrengthMeter(meterId, labelId, bits) {
+  const level = bits > 0 ? strengthLevel(bits) : 0;
+  const meter = document.getElementById(meterId);
+  meter.dataset.level = level;
+  meter.querySelectorAll('.bar').forEach((bar, i) => bar.classList.toggle('on', i < level));
+  document.getElementById(labelId).textContent = level ? STRENGTH_LABELS[level - 1] : '—';
+}
+function makePassword(len, sets) {
+  const pool = sets.flatMap(k => [...CHAR_SETS[k]]);
+  const rand = new Uint32Array(len);
+  crypto.getRandomValues(rand);
+  return [...rand].map(n => pool[n % pool.length]).join('');
+}
+/* 至少保留一类字符：最后一个勾选被禁用，视觉上可预期 */
+function bindToggles(containerId, getState, onChange) {
+  document.getElementById(containerId).querySelectorAll('.ctoggle').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const state = getState();
+      const key = btn.dataset.set;
+      if (state.has(key) && state.size === 1) return;
+      state.has(key) ? state.delete(key) : state.add(key);
+      renderToggles(containerId, state);
+      onChange();
+    });
+  });
+}
+function renderToggles(containerId, state) {
+  document.getElementById(containerId).querySelectorAll('.ctoggle').forEach(btn => {
+    const key = btn.dataset.set;
+    btn.classList.toggle('active', state.has(key));
+    btn.disabled = state.size === 1 && state.has(key);
+  });
+}
+
+/* —— 首页生成器 —— */
+const homeSets = new Set(['digits', 'letters', 'symbols']);
+let homeLen = 12;
+function homeGenerate() {
+  const sets = [...homeSets];
+  $('#genValue').textContent = makePassword(homeLen, sets);
+  setStrengthMeter('strength', 'strengthLabel', entropyBits(homeLen, sets));
+}
+bindToggles('charToggles', () => homeSets, homeGenerate);
+renderToggles('charToggles', homeSets);
+$('#lenRange').addEventListener('input', e => { homeLen = +e.target.value; $('#lenValue').textContent = homeLen; homeGenerate(); });
+$('#genBtn').addEventListener('click', homeGenerate);
+$('#regenBtn').addEventListener('click', homeGenerate);
+homeGenerate();
+
+/* —— 新增项目对话框：同款生成器，行为完全一致 —— */
+const credSets = new Set(['digits', 'letters', 'symbols']);
+let credLen = 12;
+const credDialog = $('#credDialog');
+function credGenerate() {
+  const sets = [...credSets];
+  $('#credPw').value = makePassword(credLen, sets);
+  setStrengthMeter('credStrength', 'credStrengthLabel', entropyBits(credLen, sets));
+}
+bindToggles('credToggles', () => credSets, credGenerate);
+renderToggles('credToggles', credSets);
+$('#credLen').addEventListener('input', e => { credLen = +e.target.value; $('#credLenValue').textContent = credLen; credGenerate(); });
+$('#credGen').addEventListener('click', credGenerate);
+$$('.new-cred-btn').forEach(b => b.addEventListener('click', () => { credDialog.classList.add('active'); credGenerate(); }));
+$('#credClose').addEventListener('click', () => credDialog.classList.remove('active'));
+$('#credCancel').addEventListener('click', () => credDialog.classList.remove('active'));
+credDialog.addEventListener('click', e => { if (e.target === credDialog) credDialog.classList.remove('active'); });
+$('#credEye').addEventListener('click', () => {
+  const pw = $('#credPw');
+  pw.type = pw.type === 'password' ? 'text' : 'password';
+});
+$('#credSave').addEventListener('click', () => {
+  const name = $('#credName').value.trim() || '未命名项目';
+  credDialog.classList.remove('active');
+  toast(`已保存项目「${name}」（演示）`);
+});
+
+/* ---------- 复制 / 显示密码 / 连接 ---------- */
+$$('.copy-btn').forEach(b => b.addEventListener('click', () => toast('已复制，30 秒后自动清除剪贴板')));
+$('#copyGenBtn').addEventListener('click', () => toast('密码已复制，30 秒后自动清除'));
+$$('.pw-toggle').forEach(btn => btn.addEventListener('click', () => {
+  const dots = btn.parentElement.querySelector('.pw-dots');
+  const revealed = dots.classList.toggle('revealed');
+  dots.textContent = revealed ? dots.dataset.pw : '••••••••••••';
+}));
+$$('.ssh-btn').forEach(b => b.addEventListener('click', () => toast('已发起 SSH 连接，密码将自动填充')));
+$$('.visit-btn').forEach(b => b.addEventListener('click', () => toast('正在用 Chrome 打开网站…')));
+
+/* ---------- 新增资产：类型选择在对话框内 ---------- */
+const assetDialog = $('#assetDialog');
+const addBtn = $('#addBtn');
+let dialogKind = 'server';
+const DIALOG_FORM = {
+  server: {
+    title: '新增服务器',
+    nameLabel: '显示名称（可选）', namePh: '如：生产数据库服务器',
+    addrLabel: '服务器 IP', addrPh: '如：192.168.1.101 或 192.168.1.101:2222',
+    tagsLabel: '服务标签（可选）', tagsPh: '输入后回车添加，如 MySQL、Redis、生产环境',
+    suggest: ['MySQL', 'Redis', 'Nginx', 'Docker', '数据库', '生产环境'],
+    save: '保存服务器',
+  },
+  application: {
+    title: '新增应用',
+    nameLabel: '应用名称', namePh: '如：阿里云、OpenAI、GitHub',
+    addrLabel: '网站地址（可选）', addrPh: '如：https://console.aliyun.com',
+    tagsLabel: '标签（可选）', tagsPh: '输入后回车添加，如 云平台、工作、个人',
+    suggest: ['云平台', '开发', '工作', '个人', 'AI', '邮箱'],
+    save: '保存应用',
+  },
+};
+function applyDialogKind(kind) {
+  const cfg = DIALOG_FORM[kind];
+  $$('#typeCards .type-card').forEach(c => c.classList.toggle('active', c.dataset.kind === kind));
+  $('#dlgTitle').textContent = cfg.title;
+  $('#fNameLabel').textContent = cfg.nameLabel;
+  $('#fName').placeholder = cfg.namePh;
+  $('#fAddrLabel').textContent = cfg.addrLabel;
+  $('#fAddr').placeholder = cfg.addrPh;
+  $('#dlgSave').textContent = cfg.save;
+  $('#fTagsLabel').textContent = cfg.tagsLabel;
+  $('#fTags').placeholder = cfg.tagsPh;
+  renderTagSuggest();
+}
+function openAssetDialog() {
+  dialogTags.clear();
+  tagInput.value = '';
+  renderTagPills();
+  applyDialogKind(dialogKind);
+  assetDialog.classList.add('active');
+  setTimeout(() => $('#fName').focus(), 90);
+}
+function closeAssetDialog() { assetDialog.classList.remove('active'); }
+addBtn.addEventListener('click', openAssetDialog);
+$('#dlgClose').addEventListener('click', closeAssetDialog);
+$('#dlgCancel').addEventListener('click', closeAssetDialog);
+assetDialog.addEventListener('click', e => { if (e.target === assetDialog) closeAssetDialog(); });
+$$('#typeCards .type-card').forEach(card => card.addEventListener('click', () => {
+  dialogKind = card.dataset.kind;
+  applyDialogKind(dialogKind);
+}));
+$('#dlgSave').addEventListener('click', () => {
+  const name = $('#fName').value.trim() || (dialogKind === 'server' ? ($('#fAddr').value.trim() || '未命名服务器') : '未命名应用');
+  const tagNote = dialogTags.size ? `，标签：${[...dialogTags].join('、')}` : '';
+  closeAssetDialog();
+  toast(`已${dialogKind === 'server' ? '保存服务器' : '保存应用'}「${name}」${tagNote}（演示）`);
+});
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  if (assetDialog.classList.contains('active')) closeAssetDialog();
+  if (credDialog.classList.contains('active')) credDialog.classList.remove('active');
+});
+
+/* ---------- 资产标签：新增对话框输入 + 详情页点击筛选 ---------- */
+const dialogTags = new Set();
+const tagInput = $('#fTags');
+const tagBox = $('#tagInputBox');
+function renderTagPills() {
+  tagBox.querySelectorAll('.tag-pill').forEach(p => p.remove());
+  [...dialogTags].forEach(tag => {
+    const pill = document.createElement('span');
+    pill.className = 'tag-pill';
+    pill.appendChild(document.createTextNode(tag));
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.title = '移除标签';
+    remove.innerHTML = '<svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>';
+    remove.addEventListener('click', () => { dialogTags.delete(tag); renderTagPills(); renderTagSuggest(); });
+    pill.appendChild(remove);
+    tagBox.insertBefore(pill, tagInput);
+  });
+}
+function renderTagSuggest() {
+  const wrap = $('#tagSuggest');
+  wrap.innerHTML = '';
+  DIALOG_FORM[dialogKind].suggest.forEach(tag => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = tag;
+    b.classList.toggle('on', dialogTags.has(tag));
+    b.addEventListener('click', () => {
+      dialogTags.has(tag) ? dialogTags.delete(tag) : dialogTags.add(tag);
+      renderTagPills();
+      renderTagSuggest();
+    });
+    wrap.appendChild(b);
+  });
+}
+function commitTagInput() {
+  const parts = tagInput.value.split(/[,，]/).map(s => s.trim()).filter(Boolean);
+  parts.forEach(t => { if (dialogTags.size < 8) dialogTags.add(t); });
+  tagInput.value = '';
+  if (parts.length) { renderTagPills(); renderTagSuggest(); }
+}
+tagInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); commitTagInput(); }
+  else if (e.key === 'Backspace' && tagInput.value === '' && dialogTags.size) {
+    dialogTags.delete([...dialogTags].pop());
+    renderTagPills();
+    renderTagSuggest();
+  }
+});
+tagInput.addEventListener('blur', commitTagInput);
+tagBox.addEventListener('click', () => tagInput.focus());
+renderTagPills();
+
+/* 详情页标签点击 → 按标签筛选侧边栏 */
+$('.hchip.tag').forEach(chip => chip.addEventListener('click', () => {
+  searchInput.value = chip.dataset.tag;
+  applyFilter();
+  toast('已按标签「' + chip.dataset.tag + '」筛选侧边栏，清空搜索框恢复');
+}));
+
+/* ---------- 演示占位按钮的统一兜底反馈 ---------- */
+const HANDLED_IDS = new Set(['addBtn', 'genBtn', 'regenBtn', 'copyGenBtn', 'lockBtn', 'unlockBtn', 'exportBtn', 'rekeyBtn', 'homeGenLink', 'dlgClose', 'dlgCancel', 'dlgSave', 'credClose', 'credCancel', 'credSave', 'credGen', 'credEye']);
+const HANDLED_CLASSES = ['copy-btn', 'pw-toggle', 'visit-btn', 'ssh-btn', 'type-card', 'new-cred-btn'];
+document.addEventListener('click', e => {
+  const b = e.target.closest('.icon-btn, .btn');
+  if (!b || HANDLED_IDS.has(b.id) || HANDLED_CLASSES.some(c => b.classList.contains(c))) return;
+  const name = b.getAttribute('title') || b.textContent.trim() || '按钮';
+  toast(`「${name}」— 演示占位，正式版会打开对应对话框`);
+});
+$('#exportBtn').addEventListener('click', () => toast('导出 Excel — 注意：导出文件不加密，包含明文密码'));
+$('#rekeyBtn').addEventListener('click', () => toast('修改主密码 — 将用新密码重新加密整库'));
+$('#homeGenLink').addEventListener('click', () => $('#generatorCard').scrollIntoView({ behavior: 'smooth', block: 'center' }));
+</script>
+</body>
+</html>
