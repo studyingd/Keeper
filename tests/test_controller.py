@@ -168,6 +168,30 @@ def test_auto_lock_only_fires_while_hidden(application: QApplication, vault: Vau
     assert controller.vaultState == "locked"
 
 
+def test_tray_quit_action_locks_and_requests_quit(application: QApplication, vault: VaultRepository, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The tray menu's 完全退出 must actually quit.
+
+    Regression: _tray_quit called the camelCase Qt slot with snake_case
+    (prepare_quit), raising AttributeError inside the signal handler -
+    silently swallowed under pythonw - so nothing happened at all.
+    """
+    monkeypatch.setattr(controller_module.VaultController, "_probe_tray", staticmethod(lambda: True))
+    controller = VaultController(vault.path, tray_available=True)
+    assert controller.attemptUnlock(MASTER_PASSWORD)["ok"] is True
+    assert controller.tray_icon is not None
+
+    quit_actions = [action for action in controller.tray_icon.contextMenu().actions() if action.text() == "完全退出"]
+    assert len(quit_actions) == 1
+
+    events: list[str] = []
+    controller.quitRequested.connect(lambda: events.append("quit"))
+    quit_actions[0].trigger()
+
+    assert events == ["quit"]
+    assert controller.vaultState == "locked"
+    assert not controller.repository.unlocked
+
+
 def test_lock_when_idle_uses_the_system_idle_counter(application: QApplication, vault: VaultRepository, monkeypatch: pytest.MonkeyPatch) -> None:
     controller = VaultController(vault.path, tray_available=False)
     assert controller.attemptUnlock(MASTER_PASSWORD)["ok"] is True

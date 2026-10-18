@@ -333,7 +333,11 @@ class VaultController(QObject):
         self.showWindowRequested.emit()
 
     def _tray_quit(self) -> None:
-        self.prepare_quit()
+        # prepareQuit, not prepare_quit: the Qt slot is camelCase. This call
+        # used the wrong casing, raised AttributeError inside the signal
+        # handler (silently swallowed under pythonw) and the quit signal
+        # never fired - the tray "完全退出" did nothing at all.
+        self.prepareQuit()
         self.quitRequested.emit()
 
     def _tray_activated(self, reason) -> None:  # noqa: ANN001
