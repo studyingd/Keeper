@@ -14,4 +14,8 @@ fi
 
 "$python_bin" -m PyInstaller --noconfirm --clean Keeper.spec
 
+# Same trim as the Windows build: PyInstaller bundles every QML module in the
+# PySide6 wheel; Keeper only needs QtQuick/.Controls.Basic/.Layouts/.Dialogs.
+"$python_bin" scripts/trim_dist.py dist/Keeper.app
+
 echo "Build complete: $project_root/dist/Keeper.app"

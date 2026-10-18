@@ -44,10 +44,25 @@ if (Test-Path "$projectRoot\.venv\Scripts\python.exe") {
     --add-data "$projectRoot\src\password_manager\qml;password_manager\qml" `
     --paths "$projectRoot\src" `
     --collect-all sqlcipher3 `
+    --exclude-module numpy `
+    --exclude-module PIL `
+    --exclude-module lxml `
+    --exclude-module setuptools `
+    --exclude-module lark `
+    --exclude-module distutils `
     main.py
 
 if ($LASTEXITCODE -ne 0) {
     Write-Error "PyInstaller failed with exit code $LASTEXITCODE."
+    exit $LASTEXITCODE
+}
+
+# PyInstaller's PySide6 hooks bundle every QML module in the wheel (a ~194 MB
+# WebEngineCore among them); Keeper's QML uses only QtQuick/.Controls.Basic/
+# .Layouts/.Dialogs. Cut the rest, then smoke-test the exe.
+& $python "$projectRoot\scripts\trim_dist.py" "$projectRoot\dist\Keeper\_internal"
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "trim_dist failed with exit code $LASTEXITCODE."
     exit $LASTEXITCODE
 }
 

@@ -10,7 +10,9 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    # Optional import chains only (openpyxl images/charts, setuptools' distutils
+    # shim); the export path writes plain cells and needs none of them.
+    excludes=['numpy', 'PIL', 'lxml', 'setuptools', 'lark', 'distutils'],
     noarchive=False,
     optimize=0,
 )
