@@ -354,3 +354,7 @@ python -m compileall -q src
 ```powershell
 python -m pytest tests/test_repository.py -v
 ```
+
+## 许可证
+
+[MIT](LICENSE) © aronurx
