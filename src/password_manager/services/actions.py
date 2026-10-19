@@ -47,14 +47,57 @@ def extract_url(*values: str) -> str | None:
 
 
 def default_opener() -> Callable[[str], bool]:
-    """Open URLs with the user's default browser.
+    """Open URLs in Google Chrome first, system default browser as fallback.
 
-    Keeper used to hunt for a Chrome install and prefer it, but a password
-    manager should respect the user's chosen default: it may well be a
-    hardened profile or a dedicated sandboxed browser, and second-guessing
-    that choice sends login pages somewhere unexpected.
+    Keeper used to respect the OS default browser, but the product decision
+    is now to always land login pages in Chrome. If no Chrome install is
+    found (or launching it fails), the system default browser is used so the
+    URL still opens somewhere.
     """
-    return webbrowser.open
+    return open_with_chrome
+
+
+def chrome_executable() -> Path | None:
+    """Locate a Google Chrome install across the supported platforms."""
+    if sys.platform == "win32":
+        candidates: list[Path] = []
+        for variable in ("PROGRAMFILES", "PROGRAMFILES(X86)", "LOCALAPPDATA"):
+            base = os.environ.get(variable)
+            if base:
+                candidates.append(Path(base) / "Google" / "Chrome" / "Application" / "chrome.exe")
+    elif sys.platform == "darwin":
+        candidates = [
+            Path("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"),
+            Path.home() / "Applications" / "Google Chrome.app" / "Contents" / "MacOS" / "Google Chrome",
+        ]
+    else:
+        candidates = [
+            Path("/usr/bin/google-chrome"),
+            Path("/usr/bin/google-chrome-stable"),
+            Path("/opt/google/chrome/chrome"),
+        ]
+    for name in ("google-chrome", "google-chrome-stable", "chrome"):
+        found = shutil.which(name)
+        if found:
+            candidates.append(Path(found))
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def open_with_chrome(url: str) -> bool:
+    """Open ``url`` in Google Chrome, falling back to the system default."""
+    chrome = chrome_executable()
+    if chrome is None:
+        return webbrowser.open(url)
+    try:
+        # chrome.exe is a GUI program: no console flags needed, and when an
+        # instance is already running the URL simply becomes a new tab.
+        subprocess.Popen([str(chrome), url])
+        return True
+    except OSError:
+        return webbrowser.open(url)
 
 
 def open_url(url: str, opener: Callable[[str], bool] | None = None) -> None:

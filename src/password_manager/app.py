@@ -10,8 +10,8 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-from PySide6.QtCore import QPointF, QSize, Qt, QTimer
-from PySide6.QtGui import QAction, QCloseEvent, QColor, QFont, QIcon, QPainter, QRadialGradient
+from PySide6.QtCore import QPointF, QSize, Qt, QTimer, Signal
+from PySide6.QtGui import QAction, QCloseEvent, QColor, QFont, QIcon, QMouseEvent, QPainter, QRadialGradient
 from PySide6.QtNetwork import QLocalServer
 from PySide6.QtWidgets import (
     QApplication,
@@ -198,6 +198,24 @@ def hchip(text: str, *, mono: bool = False, tag: bool = False) -> QLabel:
     if tag:
         chip.setProperty("tag", True)
     return chip
+
+
+class LinkChip(QLabel):
+    """A header chip that acts like a link (an application's web address)."""
+
+    clicked = Signal()
+
+    def __init__(self, text: str) -> None:
+        super().__init__(text)
+        self.setObjectName("hchip")
+        self.setProperty("mono", True)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setToolTip("点击在浏览器中打开")
+
+    def mousePressEvent(self, event: QMouseEvent) -> None:  # noqa: N802
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.clicked.emit()
+        super().mousePressEvent(event)
 
 
 def sidebar_row(entry: Entry, credential_count: int) -> QWidget:
@@ -1354,7 +1372,13 @@ class VaultWindow(QMainWindow):
         chips = QHBoxLayout()
         chips.setSpacing(7)
         if entry.address:
-            chips.addWidget(hchip(entry.address, mono=True))
+            if entry.kind == "application":
+                visit_chip = LinkChip(entry.address)
+                visit_chip.clicked.connect(lambda: self.open_address(entry.address))
+                chips.addWidget(visit_chip)
+            else:
+                # 服务器保存的是 IP/端口，用 mstsc/ssh 连接而非浏览器，保持静态展示
+                chips.addWidget(hchip(entry.address, mono=True))
         credentials = self.repository.list_credentials(entry.id)
         chips.addWidget(hchip(f"{len(credentials)} 个项目"))
         for tag in entry.tags[:4]:
@@ -1494,6 +1518,9 @@ class VaultWindow(QMainWindow):
             connect.clicked.connect(lambda: self.connect_credential(entry, credential))
             buttons.addWidget(connect)
         url = extract_url(credential.extra, credential.label)
+        if url is None and entry.kind == "application" and entry.address:
+            # 应用资产的地址就是登录页：项目自身没有写 URL 时也允许一键访问。
+            url = entry.address
         if url:
             visit = button("↗ 访问网站", primary=True)
             visit.setIcon(icon("external", ACCENT_INK))

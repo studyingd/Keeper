@@ -44,18 +44,59 @@ def test_extracts_only_http_urls_from_credential_text() -> None:
     assert extract_url("ssh://host.example.test", "No web page") is None
 
 
-def test_default_opener_uses_the_system_default_browser(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Login pages must open in the user's chosen default browser.
+def test_default_opener_prefers_chrome(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    """Login pages land in Google Chrome when an install is present."""
+    fake_chrome = tmp_path / "chrome.exe"
+    fake_chrome.write_bytes(b"")
+    monkeypatch.setattr(actions, "chrome_executable", lambda: fake_chrome)
+    launched: list[list[str]] = []
+    monkeypatch.setattr(actions.subprocess, "Popen", lambda command, **kwargs: launched.append(command))
+    fallback: list[str] = []
+    monkeypatch.setattr(actions.webbrowser, "open", fallback.append)
 
-    A password manager should not second-guess that choice: the default may
-    be a hardened or sandboxed profile picked exactly for credential work.
-    """
+    assert actions.default_opener()("https://console.example.test") is True
+
+    assert launched == [[str(fake_chrome), "https://console.example.test"]]
+    assert fallback == []
+
+
+def test_default_opener_falls_back_to_the_system_browser_without_chrome(monkeypatch: pytest.MonkeyPatch) -> None:
     opened: list[str] = []
-    monkeypatch.setattr(actions.webbrowser, "open", opened.append)
+    monkeypatch.setattr(actions, "chrome_executable", lambda: None)
+    monkeypatch.setattr(actions.webbrowser, "open", lambda url: opened.append(url) or True)
 
-    actions.default_opener()("https://console.example.test")
+    assert actions.default_opener()("https://console.example.test") is True
 
     assert opened == ["https://console.example.test"]
+
+
+def test_default_opener_falls_back_when_chrome_launch_fails(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    fake_chrome = tmp_path / "chrome.exe"
+    fake_chrome.write_bytes(b"")
+    monkeypatch.setattr(actions, "chrome_executable", lambda: fake_chrome)
+
+    def refuse(*args, **kwargs) -> None:
+        raise OSError("chrome broken")
+
+    monkeypatch.setattr(actions.subprocess, "Popen", refuse)
+    opened: list[str] = []
+    monkeypatch.setattr(actions.webbrowser, "open", lambda url: opened.append(url) or True)
+
+    assert actions.default_opener()("https://console.example.test") is True
+
+    assert opened == ["https://console.example.test"]
+
+
+@windows_only
+def test_chrome_executable_probes_the_standard_install_paths(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    fake = tmp_path / "Google" / "Chrome" / "Application" / "chrome.exe"
+    fake.parent.mkdir(parents=True)
+    fake.write_bytes(b"")
+    monkeypatch.setenv("PROGRAMFILES", str(tmp_path))
+
+    found = actions.chrome_executable()
+
+    assert found == fake and found.is_file()
 
 
 @windows_only

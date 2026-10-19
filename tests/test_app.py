@@ -21,6 +21,7 @@ from password_manager.app import (
     THROTTLE_FILE_NAME,
     CredentialDialog,
     EntryDialog,
+    LinkChip,
     RekeyDialog,
     UnlockDialog,
     VaultWindow,
@@ -302,6 +303,29 @@ def test_credential_card_shows_visit_only_for_http_url(application: QApplication
 
     assert "↗ 访问网站" in with_url_buttons
     assert "↗ 访问网站" not in without_url_buttons
+    window.close()
+
+
+def test_credential_card_falls_back_to_application_address(application: QApplication, vault: VaultRepository, monkeypatch: pytest.MonkeyPatch) -> None:
+    """An application's address is the login page: cards without their own
+    URL still get the visit button, and the address chip itself opens it."""
+    opened: list[str] = []
+    monkeypatch.setattr(app_module, "open_url", opened.append)
+    entry = vault.save_entry(EntryDraft(kind="application", name="阿里云", address="https://console.aliyun.com"))
+    credential = vault.save_credential(entry.id, CredentialDraft(kind="custom", label="主账号"))
+    window = VaultWindow(vault.path, tray_available=False)
+    window.repository = vault
+
+    card = window.credential_card(entry, credential)
+    assert "↗ 访问网站" in [item.text() for item in card.findChildren(QPushButton)]
+
+    window.render_entry(entry)
+    chips = window.findChildren(LinkChip)
+    assert [chip.text() for chip in chips] == ["https://console.aliyun.com"]
+    assert chips[0].toolTip() == "点击在浏览器中打开"
+
+    QTest.mouseClick(chips[0], Qt.MouseButton.LeftButton)
+    assert opened == ["https://console.aliyun.com"]
     window.close()
 
 

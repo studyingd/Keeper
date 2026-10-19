@@ -67,7 +67,7 @@ Flickable {
                     Repeater {
                         model: {
                             var chips = []
-                            if (root.entry.address) chips.push({ text: root.entry.address, mono: true, tag: false })
+                            if (root.entry.address) chips.push({ text: root.entry.address, mono: true, tag: false, clickable: root.entry.kind === "application" })
                             chips.push({ text: `${root.entry.credentialCount} 个项目`, mono: false, tag: false })
                             var tags = root.entry.tags || []
                             for (var i = 0; i < Math.min(tags.length, 4); i++)
@@ -75,20 +75,33 @@ Flickable {
                             return chips
                         }
                         Rectangle {
+                            id: chip
                             required property var modelData
+                            readonly property bool clickable: modelData.clickable === true
                             radius: 12
                             implicitHeight: 22
                             implicitWidth: chipText.implicitWidth + 22
-                            color: modelData.tag ? Theme.accentDim : Theme.surface
+                            color: modelData.tag ? Theme.accentDim : (clickable && chipHover.containsMouse ? Theme.accentDim : Theme.surface)
                             border.width: 1
-                            border.color: modelData.tag ? Theme.accentBorder : Theme.borderSoft
+                            border.color: modelData.tag ? Theme.accentBorder : (clickable && chipHover.containsMouse ? Theme.accentBorder : Theme.borderSoft)
                             Text {
                                 id: chipText
                                 anchors.centerIn: parent
                                 text: modelData.tag ? `#${modelData.text}` : modelData.text
-                                color: modelData.tag ? Theme.accent : Theme.textMuted
+                                color: modelData.tag ? Theme.accent : (chip.clickable ? Theme.accent : Theme.textMuted)
                                 font { family: modelData.mono ? Theme.monoFamily : Theme.bodyFamily; pixelSize: modelData.mono ? 11 : 12 }
                             }
+                            // 应用的网站地址 chip 可点击直达；服务器保存的是 IP，不进浏览器，保持静态展示
+                            MouseArea {
+                                id: chipHover
+                                enabled: chip.clickable
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: controller.openAddress(root.entry.address)
+                            }
+                            ToolTip.visible: chipHover.containsMouse && chip.clickable
+                            ToolTip.text: "点击在浏览器中打开"
                         }
                     }
                     Item { Layout.fillWidth: true }

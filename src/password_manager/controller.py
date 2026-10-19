@@ -616,6 +616,11 @@ class VaultController(QObject):
     def _credential_dict(entry: Entry, credential: Credential) -> dict:
         is_login = credential.kind in {"ssh", "rdp"}
         url = extract_url(credential.extra, credential.label)
+        if url is None and entry.kind == "application" and entry.address:
+            # An application's stored address is the login page: fall back to
+            # it so every credential card can offer one-click access even
+            # when the item text itself carries no explicit URL.
+            url = entry.address
         return {
             "id": credential.id,
             "kind": credential.kind,

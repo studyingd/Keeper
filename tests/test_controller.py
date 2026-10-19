@@ -284,6 +284,24 @@ def test_select_entry_loads_credential_cards(application: QApplication, vault: V
     assert all(not c["showConnect"] for c in controller.credentials)
     assert all(c["connectLabel"] == "" for c in controller.credentials if not c["isLogin"])
 
+    # A credential without its own URL falls back to the application's
+    # address, so the visit button shows for every card of the app.
+    main_card = next(c for c in controller.credentials if c["id"] == data["main"].id)
+    assert main_card["url"] == "https://console.aliyun.com"
+
+
+def test_server_credential_url_never_falls_back_to_the_ip_address(application: QApplication, vault: VaultRepository) -> None:
+    """The server address is an IP for ssh/mstsc, not a web page: the visit
+    button must only appear for an explicit http(s) URL in the item text."""
+    server = vault.save_entry(EntryDraft(kind="server", name="生产服务器", address="192.168.1.101"))
+    plain = vault.save_credential(server.id, CredentialDraft(kind="custom", label="后台", extra=""))
+    controller = VaultController(vault.path, tray_available=False)
+    assert controller.attemptUnlock(MASTER_PASSWORD)["ok"] is True
+    controller.selectEntry(server.id)
+
+    card = next(c for c in controller.credentials if c["id"] == plain.id)
+    assert card["url"] == ""
+
 
 def test_save_entry_validates_and_reports_errors(application: QApplication, vault: VaultRepository) -> None:
     controller = VaultController(vault.path, tray_available=False)
